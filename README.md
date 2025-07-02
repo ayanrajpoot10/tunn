@@ -307,13 +307,6 @@ This project uses automated GitHub Actions workflows to create releases with cro
 To create a new release:
 
 ```bash
-# Linux/macOS
-./scripts/release.sh v1.0.0
-
-# Windows PowerShell  
-.\scripts\release.ps1 v1.0.0
-
-# Manual method
 git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 ```

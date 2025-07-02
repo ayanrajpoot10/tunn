@@ -38,13 +38,6 @@ The release process builds binaries for the following platforms:
 
 1. **Create and push a version tag:**
    ```bash
-   # Using the provided script (Linux/macOS)
-   ./scripts/release.sh v1.0.0
-   
-   # Using PowerShell script (Windows)
-   .\scripts\release.ps1 v1.0.0
-   
-   # Manual method
    git tag -a v1.0.0 -m "Release v1.0.0"
    git push origin v1.0.0
    ```
@@ -118,29 +111,6 @@ Follow semantic versioning (SemVer):
   - Create GitHub release (draft for pre-releases)
   - Build and upload platform-specific binaries
   - Generate and upload checksums
-
-## Release Scripts
-
-### Linux/macOS: `scripts/release.sh`
-```bash
-# Create and push a release tag
-./scripts/release.sh v1.0.0
-```
-
-Features:
-- Validates version format
-- Checks git repository status
-- Updates version in code if applicable
-- Creates and pushes tag
-- Opens release page in browser
-
-### Windows: `scripts/release.ps1`
-```powershell
-# Create and push a release tag
-.\scripts\release.ps1 v1.0.0
-```
-
-Same features as the bash script, adapted for PowerShell.
 
 ## Makefile Targets
 
