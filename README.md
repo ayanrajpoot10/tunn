@@ -318,8 +318,6 @@ The release process automatically:
 - Creates a GitHub release with detailed changelog
 - Uploads all assets
 
-See [docs/RELEASE.md](docs/RELEASE.md) for detailed release documentation.
-
 ## Dependencies
 
 - **[Cobra](https://github.com/spf13/cobra)**: CLI framework
