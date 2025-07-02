@@ -7,7 +7,8 @@ import (
 )
 
 var (
-	verbose bool
+	verbose   bool
+	proxyType string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -21,12 +22,14 @@ It creates secure SSH tunnels over WebSocket connections and provides a SOCKS pr
 for routing traffic through the established tunnel.
 
 Available tunnel modes:
-  proxy         - HTTP proxy tunneling strategy
+  proxy         - HTTP proxy tunneling strategy  
   sni           - SNI fronting strategy  
   direct        - Direct connection with front domain spoofing
 
+All modes support both SOCKS5 and HTTP local proxy types via --proxy-type flag.
+
 Use 'tunn [mode] --help' for mode-specific options and examples.`,
-	Version: "1.0.0",
+	Version: "v0.1.1",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -41,6 +44,7 @@ func Execute() {
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().StringVar(&proxyType, "proxy-type", "socks5", "local proxy type: 'socks5' or 'http'")
 
 	// Disable built-in commands
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -48,4 +52,9 @@ func init() {
 		Use:    "no-help",
 		Hidden: true,
 	})
+}
+
+// GetProxyType returns the global proxy type setting
+func GetProxyType() string {
+	return proxyType
 }

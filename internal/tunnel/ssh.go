@@ -1,10 +1,14 @@
 package tunnel
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -314,6 +318,248 @@ func (s *SSHOverWebSocket) sendSOCKS5Success(clientConn net.Conn) {
 	clientConn.Write(response)
 }
 
+// OpenHTTPProxy starts an HTTP proxy server on the specified local port
+func (s *SSHOverWebSocket) OpenHTTPProxy(localPort int) error {
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
+	if err != nil {
+		return fmt.Errorf("failed to start HTTP proxy: %v", err)
+	}
+
+	fmt.Printf("[*] HTTP proxy listening on 127.0.0.1:%d\n", localPort)
+
+	go func() {
+		defer listener.Close()
+		for {
+			clientConn, err := listener.Accept()
+			if err != nil {
+				// Check if this is because the listener was closed
+				if netErr, ok := err.(net.Error); ok && !netErr.Temporary() {
+					fmt.Printf("[*] HTTP proxy listener closed\n")
+					return
+				}
+				fmt.Printf("[!] Error accepting connection: %v\n", err)
+				// Brief pause before retrying
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+
+			// Handle each client in a separate goroutine
+			go s.handleHTTPClient(clientConn)
+		}
+	}()
+
+	fmt.Println("[*] HTTP proxy started.")
+	return nil
+}
+
+// handleHTTPClient handles an HTTP proxy client connection
+func (s *SSHOverWebSocket) handleHTTPClient(clientConn net.Conn) {
+	defer func() {
+		clientConn.Close()
+		if r := recover(); r != nil {
+			fmt.Printf("[!] Panic in HTTP proxy handler: %v\n", r)
+		}
+	}()
+
+	// Set initial timeout for HTTP request reading
+	clientConn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	clientConn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+
+	// Read the HTTP request
+	reader := bufio.NewReader(clientConn)
+	req, err := http.ReadRequest(reader)
+	if err != nil {
+		fmt.Printf("[!] Error reading HTTP request: %v\n", err)
+		s.sendHTTPError(clientConn, 400, "Bad Request")
+		return
+	}
+
+	// Handle CONNECT method for HTTPS tunneling
+	if req.Method == "CONNECT" {
+		s.handleHTTPConnect(clientConn, req)
+		return
+	}
+
+	// Handle regular HTTP requests (GET, POST, etc.)
+	s.handleHTTPRequest(clientConn, req)
+}
+
+// handleHTTPConnect handles HTTPS tunneling via CONNECT method
+func (s *SSHOverWebSocket) handleHTTPConnect(clientConn net.Conn, req *http.Request) {
+	// Parse host and port from the request
+	host, port, err := net.SplitHostPort(req.Host)
+	if err != nil {
+		// If no port specified, default to 443 for HTTPS
+		host = req.Host
+		port = "443"
+	}
+
+	// Convert port to integer
+	var portInt int
+	if port == "https" || port == "443" {
+		portInt = 443
+	} else if port == "http" || port == "80" {
+		portInt = 80
+	} else {
+		_, err := fmt.Sscanf(port, "%d", &portInt)
+		if err != nil {
+			fmt.Printf("[!] Invalid port in CONNECT request: %s\n", port)
+			s.sendHTTPError(clientConn, 400, "Bad Request")
+			return
+		}
+	}
+
+	fmt.Printf("[*] HTTP CONNECT request to %s:%d\n", host, portInt)
+
+	// Send 200 Connection Established response
+	response := "HTTP/1.1 200 Connection established\r\n\r\n"
+	_, err = clientConn.Write([]byte(response))
+	if err != nil {
+		fmt.Printf("[!] Error sending CONNECT response: %v\n", err)
+		return
+	}
+
+	fmt.Printf("[+] HTTP CONNECT tunnel established to %s:%d\n", host, portInt)
+
+	// Open SSH channel and forward traffic
+	s.openSSHChannel(clientConn, host, portInt)
+}
+
+// handleHTTPRequest handles regular HTTP requests (GET, POST, etc.)
+func (s *SSHOverWebSocket) handleHTTPRequest(clientConn net.Conn, req *http.Request) {
+	// Parse the target URL
+	var targetHost string
+	var targetPort int
+	var targetPath string
+
+	if req.URL.IsAbs() {
+		// Full URL provided (typical for proxy requests)
+		parsedURL, err := url.Parse(req.URL.String())
+		if err != nil {
+			fmt.Printf("[!] Error parsing URL: %v\n", err)
+			s.sendHTTPError(clientConn, 400, "Bad Request")
+			return
+		}
+
+		targetHost = parsedURL.Hostname()
+		if parsedURL.Port() != "" {
+			_, err := fmt.Sscanf(parsedURL.Port(), "%d", &targetPort)
+			if err != nil {
+				fmt.Printf("[!] Invalid port in URL: %s\n", parsedURL.Port())
+				s.sendHTTPError(clientConn, 400, "Bad Request")
+				return
+			}
+		} else {
+			// Default ports
+			if parsedURL.Scheme == "https" {
+				targetPort = 443
+			} else {
+				targetPort = 80
+			}
+		}
+		targetPath = parsedURL.RequestURI()
+	} else {
+		// Relative URL - use Host header
+		if req.Host == "" {
+			fmt.Printf("[!] No Host header in HTTP request\n")
+			s.sendHTTPError(clientConn, 400, "Bad Request")
+			return
+		}
+
+		host, port, err := net.SplitHostPort(req.Host)
+		if err != nil {
+			targetHost = req.Host
+			targetPort = 80 // Default HTTP port
+		} else {
+			targetHost = host
+			_, err := fmt.Sscanf(port, "%d", &targetPort)
+			if err != nil {
+				fmt.Printf("[!] Invalid port in Host header: %s\n", port)
+				s.sendHTTPError(clientConn, 400, "Bad Request")
+				return
+			}
+		}
+		targetPath = req.URL.RequestURI()
+	}
+
+	fmt.Printf("[*] HTTP %s request to %s:%d%s\n", req.Method, targetHost, targetPort, targetPath)
+
+	// Open SSH channel to target
+	sshConn, err := s.sshClient.Dial("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort))
+	if err != nil {
+		fmt.Printf("[!] Failed to open SSH channel for HTTP request: %v\n", err)
+		s.sendHTTPError(clientConn, 502, "Bad Gateway")
+		return
+	}
+	defer sshConn.Close()
+
+	// Reconstruct and forward the HTTP request
+	err = s.forwardHTTPRequest(sshConn, req, targetPath)
+	if err != nil {
+		fmt.Printf("[!] Error forwarding HTTP request: %v\n", err)
+		s.sendHTTPError(clientConn, 502, "Bad Gateway")
+		return
+	}
+
+	// Forward the response back to client
+	s.forwardHTTPResponse(clientConn, sshConn)
+}
+
+// forwardHTTPRequest reconstructs and sends the HTTP request through SSH tunnel
+func (s *SSHOverWebSocket) forwardHTTPRequest(sshConn net.Conn, req *http.Request, targetPath string) error {
+	// Reconstruct the request
+	var requestBuilder strings.Builder
+
+	// Request line
+	requestBuilder.WriteString(fmt.Sprintf("%s %s %s\r\n", req.Method, targetPath, req.Proto))
+
+	// Headers (excluding proxy-specific headers)
+	for name, values := range req.Header {
+		// Skip proxy-specific headers
+		if strings.ToLower(name) == "proxy-connection" {
+			continue
+		}
+		for _, value := range values {
+			requestBuilder.WriteString(fmt.Sprintf("%s: %s\r\n", name, value))
+		}
+	}
+
+	// End of headers
+	requestBuilder.WriteString("\r\n")
+
+	// Send request headers
+	_, err := sshConn.Write([]byte(requestBuilder.String()))
+	if err != nil {
+		return err
+	}
+
+	// Forward request body if present
+	if req.Body != nil {
+		_, err = io.Copy(sshConn, req.Body)
+		req.Body.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// forwardHTTPResponse forwards the HTTP response from SSH tunnel back to client
+func (s *SSHOverWebSocket) forwardHTTPResponse(clientConn net.Conn, sshConn net.Conn) {
+	// Simply forward all data from SSH connection back to client
+	_, err := io.Copy(clientConn, sshConn)
+	if err != nil && err != io.EOF {
+		fmt.Printf("[!] Error forwarding HTTP response: %v\n", err)
+	}
+}
+
+// sendHTTPError sends an HTTP error response
+func (s *SSHOverWebSocket) sendHTTPError(clientConn net.Conn, statusCode int, statusText string) {
+	response := fmt.Sprintf("HTTP/1.1 %d %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", statusCode, statusText)
+	clientConn.Write([]byte(response))
+}
+
 // openSSHChannel opens an SSH channel and forwards data
 func (s *SSHOverWebSocket) openSSHChannel(clientConn net.Conn, host string, port int) {
 	fmt.Printf("[*] Opening SSH channel to %s:%d\n", host, port)
@@ -465,6 +711,23 @@ func ConnectViaWSAndStartSOCKS(wsConn net.Conn, sshUser, sshPassword, sshPort st
 	}
 
 	err = connector.OpenSOCKSProxy(localSOCKSPort)
+	if err != nil {
+		return nil, err
+	}
+
+	return connector, nil
+}
+
+// ConnectViaWSAndStartHTTP is a convenience function to start HTTP proxy
+func ConnectViaWSAndStartHTTP(wsConn net.Conn, sshUser, sshPassword, sshPort string, localHTTPPort int) (*SSHOverWebSocket, error) {
+	connector := NewSSHOverWebSocket(wsConn, sshUser, sshPassword, sshPort)
+
+	err := connector.StartSSHTransport()
+	if err != nil {
+		return nil, err
+	}
+
+	err = connector.OpenHTTPProxy(localHTTPPort)
 	if err != nil {
 		return nil, err
 	}

@@ -35,15 +35,28 @@ This mode establishes a direct connection to the target host and uses
 a front domain in the Host header to bypass filtering, creating a WebSocket 
 connection directly to the target.
 
+The local proxy type can be controlled with the global --proxy-type flag:
+  --proxy-type socks5  : Start a SOCKS5 proxy (default, works with all protocols)
+  --proxy-type http    : Start an HTTP proxy (works with HTTP/HTTPS traffic)
+
 Example usage:
-  tunn direct --front-domain google.com --target-host target.example.com
-  tunn direct --front-domain cloudflare.com --target-host target.example.com --target-port 443 --ssh-username user`,
+  # Basic direct connection with SOCKS5 proxy (default)
+  tunn direct --front-domain google.com --target-host target.example.com --ssh-username user --ssh-password pass
+  
+  # Direct connection with HTTP proxy
+  tunn --proxy-type http direct --front-domain cloudflare.com --target-host target.example.com --target-port 443 --ssh-username user --ssh-password pass`,
 	Run: runDirectTunnel,
 }
 
 func runDirectTunnel(cmd *cobra.Command, args []string) {
 	if verbose {
 		fmt.Println("Starting direct tunnel...")
+	}
+
+	// Validate proxy type
+	globalProxyType := GetProxyType()
+	if globalProxyType != "socks5" && globalProxyType != "http" {
+		log.Fatal("Error: --proxy-type must be either 'socks5' or 'http'")
 	}
 
 	// Create configuration with direct specific defaults
@@ -107,21 +120,39 @@ func runDirectTunnel(cmd *cobra.Command, args []string) {
 	}
 	defer conn.Close()
 
-	// Start SSH connection and SOCKS proxy
-	sshConn, err := tunnel.ConnectViaWSAndStartSOCKS(
-		conn,
-		cfg.SSHUsername,
-		cfg.SSHPassword,
-		cfg.SSHPort,
-		cfg.LocalSOCKSPort,
-	)
+	// Start SSH connection and local proxy
+	var sshConn *tunnel.SSHOverWebSocket
+
+	if globalProxyType == "http" {
+		sshConn, err = tunnel.ConnectViaWSAndStartHTTP(
+			conn,
+			cfg.SSHUsername,
+			cfg.SSHPassword,
+			cfg.SSHPort,
+			cfg.LocalSOCKSPort,
+		)
+	} else {
+		sshConn, err = tunnel.ConnectViaWSAndStartSOCKS(
+			conn,
+			cfg.SSHUsername,
+			cfg.SSHPassword,
+			cfg.SSHPort,
+			cfg.LocalSOCKSPort,
+		)
+	}
 	if err != nil {
 		log.Fatalf("Error starting SSH connection: %v", err)
 	}
 	defer sshConn.Close()
 
-	fmt.Printf("[+] SOCKS proxy up on 127.0.0.1:%d\n", cfg.LocalSOCKSPort)
-	fmt.Println("[+] All traffic through that proxy is forwarded over SSH via WS tunnel.")
+	fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, cfg.LocalSOCKSPort)
+	fmt.Printf("[+] All traffic through that proxy is forwarded over SSH via WS tunnel.\n")
+
+	if globalProxyType == "socks5" {
+		fmt.Printf("[+] Configure your applications to use SOCKS5 proxy 127.0.0.1:%d\n", cfg.LocalSOCKSPort)
+	} else {
+		fmt.Printf("[+] Configure your applications to use HTTP proxy 127.0.0.1:%d\n", cfg.LocalSOCKSPort)
+	}
 
 	// Wait for interrupt signal or timeout
 	sigChan := make(chan os.Signal, 1)
