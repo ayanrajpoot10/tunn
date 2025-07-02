@@ -97,15 +97,16 @@ jobs:
         GOARCH: ${{ matrix.goarch }}
       run: |
         mkdir -p dist
-        binary_name="tunn-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.binary_suffix }}"
+        binary_name="tunn${{ matrix.binary_suffix }}"
+        archive_name="tunn-${{ matrix.os }}-${{ matrix.arch }}"
         go build -ldflags="-s -w" -o "dist/${binary_name}" .
         
         # Create archives
         cd dist
         if [ "${{ matrix.os }}" = "windows" ]; then
-          zip "${binary_name%.exe}.zip" "${binary_name}"
+          zip "${archive_name}.zip" "${binary_name}"
         else
-          tar -czf "${binary_name}.tar.gz" "${binary_name}"
+          tar -czf "${archive_name}.tar.gz" "${binary_name}"
         fi
 
     - name: Upload artifacts

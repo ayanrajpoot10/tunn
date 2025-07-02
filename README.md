@@ -6,7 +6,7 @@ Tunn is a powerful and flexible SSH tunneling tool written in Go that creates se
 
 - **Multiple Tunnel Strategies**: Support for proxy, SNI fronting, and direct connection modes
 - **WebSocket-based SSH Tunnels**: Establishes SSH connections over WebSocket for better bypass capabilities
-- **SOCKS Proxy**: Built-in SOCKS5 proxy server for routing local traffic through the tunnel
+- **Dual Proxy Support**: Built-in SOCKS5 and HTTP proxy server for routing local traffic through the tunnel
 - **Domain Spoofing**: Front domain support for Host header manipulation to bypass restrictions
 - **Configurable Payloads**: Custom HTTP payload templates for different environments
 - **Cross-platform**: Windows, Linux, and macOS support
@@ -65,18 +65,25 @@ make build-all
 
 ## Usage
 
-Tunn supports three main tunneling strategies:
+Tunn supports multiple tunneling strategies, and all modes support both SOCKS5 and HTTP local proxy types via the global `--proxy-type` flag:
+
+**Global Proxy Type Control:**
+- `--proxy-type socks5` (default): Universal compatibility, works with any TCP-based protocol
+- `--proxy-type http`: Optimized for web traffic, works with HTTP/HTTPS applications
 
 ### 1. Proxy Mode
 
 Routes traffic through an HTTP proxy server first, then establishes a WebSocket tunnel to the target host.
 
 ```bash
-# Basic proxy mode
+# Basic proxy mode with SOCKS5 local proxy (default)
 tunn proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
 
+# Proxy mode with HTTP local proxy
+tunn --proxy-type http proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
+
 # With custom proxy port and front domain
-tunn proxy \
+tunn --proxy-type socks5 proxy \
   --proxy-host proxy.example.com \
   --proxy-port 8080 \
   --target-host ssh-server.com \
@@ -96,11 +103,11 @@ tunn proxy \
 Uses SNI (Server Name Indication) fronting to establish connections through a proxy with forged SNI headers.
 
 ```bash
-# Basic SNI fronting
+# Basic SNI fronting with SOCKS5 proxy (default)
 tunn sni --front-domain google.com --proxy-host proxy.example.com --ssh-username user --ssh-password pass
 
-# With custom configuration
-tunn sni \
+# SNI fronting with HTTP proxy
+tunn --proxy-type http sni \
   --front-domain cloudflare.com \
   --proxy-host proxy.example.com \
   --proxy-port 443 \
@@ -120,11 +127,11 @@ tunn sni \
 Establishes a direct connection to the target host with optional Host header spoofing.
 
 ```bash
-# Basic direct connection
+# Basic direct connection with SOCKS5 proxy (default)
 tunn direct --target-host ssh-server.com --ssh-username user --ssh-password pass
 
-# With front domain spoofing
-tunn direct \
+# Direct connection with HTTP proxy and front domain spoofing
+tunn --proxy-type http direct \
   --front-domain google.com \
   --target-host ssh-server.com \
   --target-port 443 \
@@ -141,7 +148,8 @@ tunn direct \
 
 All modes support these additional options:
 
-- `--local-port` / `-l`: Local SOCKS proxy port (default: 1080)
+- `--proxy-type`: Local proxy type - `socks5` (default) or `http` (global flag)
+- `--local-port` / `-l`: Local proxy port (default: 1080 for SOCKS5, 8080 for HTTP)
 - `--ssh-port`: SSH port on target server (default: 22)
 - `--timeout` / `-t`: Connection timeout in seconds (0 = no timeout)
 - `--payload`: Custom HTTP payload template
@@ -172,6 +180,81 @@ tunn proxy \
   --ssh-password pass
 ```
 
+## SOCKS5 vs HTTP Proxy Comparison
+
+Tunn now supports both SOCKS5 and HTTP proxy types for your local proxy server. Here's when to use each:
+
+### SOCKS5 Proxy (Default)
+
+**Best for:** Universal application compatibility
+**Protocols:** Any TCP-based protocol (SSH, HTTP, HTTPS, FTP, SMTP, etc.)
+
+**Advantages:**
+- ✅ **Protocol Agnostic**: Works with any TCP application
+- ✅ **Binary Data Support**: Handles any type of data
+- ✅ **Low Overhead**: Minimal protocol overhead
+- ✅ **Port Flexibility**: Can connect to any port
+- ✅ **Transparent**: Preserves original destination information
+
+**Use cases:**
+- SSH tunneling through proxies
+- Database connections
+- File transfers (FTP, SFTP)
+- Email clients (SMTP, IMAP)
+- Any non-web application
+
+**Example usage:**
+```bash
+# SOCKS5 proxy (default)
+tunn proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
+
+# Configure applications
+curl --socks5 127.0.0.1:1080 https://httpbin.org/ip
+ssh -o ProxyCommand="nc -X 5 -x 127.0.0.1:1080 %h %p" user@remote-server
+```
+
+### HTTP Proxy
+
+**Best for:** Web browsing and HTTP-based applications
+**Protocols:** HTTP and HTTPS
+
+**Advantages:**
+- ✅ **Web Optimized**: Excellent performance for web traffic
+- ✅ **Browser Compatible**: Works seamlessly with web browsers
+- ✅ **Header Processing**: Can modify HTTP headers
+- ✅ **CONNECT Support**: Full HTTPS tunneling support
+
+**Limitations:**
+- ❌ **HTTP/HTTPS Only**: Cannot handle other protocols directly
+- ❌ **Limited Scope**: Not suitable for non-web applications
+
+**Use cases:**
+- Web browsing through corporate proxies
+- HTTP API access
+- Web scraping
+- Browser-based applications
+
+**Example usage:**
+```bash
+# HTTP proxy mode
+tunn --proxy-type http proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
+
+# Configure applications
+curl --proxy 127.0.0.1:8080 https://httpbin.org/ip
+export http_proxy=http://127.0.0.1:8080
+export https_proxy=http://127.0.0.1:8080
+```
+
+### Choosing the Right Proxy Type
+
+| Use Case | Recommended Type | Reason |
+|----------|------------------|---------|
+| SSH tunneling | SOCKS5 | Universal protocol support |
+| Web browsing only | HTTP | Optimized for web traffic |
+| Database connections | SOCKS5 | Supports non-HTTP protocols |
+| Mixed applications | SOCKS5 | Maximum compatibility |
+| Corporate environments | HTTP | Better integration with existing HTTP proxy infrastructure |
+
 ## Examples
 
 ### Example 1: Corporate Proxy Bypass
@@ -188,7 +271,25 @@ tunn proxy \
   --local-port 1080
 ```
 
-### Example 2: SNI Fronting for CDN Bypass
+### Example 2: HTTP Proxy Mode for Web Traffic
+
+```bash
+# Use HTTP proxy mode for optimized web browsing
+tunn --proxy-type http proxy \
+  --proxy-host corporate-proxy.company.com \
+  --proxy-port 8080 \
+  --target-host ssh-server.com \
+  --ssh-username user \
+  --ssh-password pass
+
+# The local HTTP proxy will be available on 127.0.0.1:8080
+# Configure your browser to use 127.0.0.1:8080 as HTTP proxy
+# Or set environment variables:
+# export http_proxy=http://127.0.0.1:8080
+# export https_proxy=http://127.0.0.1:8080
+```
+
+### Example 3: SNI Fronting for CDN Bypass
 
 ```bash
 # Use SNI fronting to bypass CDN restrictions
@@ -200,7 +301,7 @@ tunn sni \
   --ssh-password pass
 ```
 
-### Example 3: Direct Connection with Domain Spoofing
+### Example 4: Direct Connection with Domain Spoofing
 
 ```bash
 # Direct connection with Host header spoofing
