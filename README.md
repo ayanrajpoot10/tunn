@@ -16,7 +16,33 @@ Tunn is a powerful and flexible SSH tunneling tool written in Go that creates se
 
 ### Download Pre-built Binaries
 
-Download the latest release from the releases page for your platform.
+Download the latest release from the [releases page](../../releases) for your platform:
+
+#### Windows
+- `tunn-windows-amd64.zip` - Windows 64-bit (Intel/AMD)
+- `tunn-windows-386.zip` - Windows 32-bit  
+- `tunn-windows-arm64.zip` - Windows ARM64
+
+#### Linux
+- `tunn-linux-amd64.tar.gz` - Linux 64-bit (Intel/AMD)
+- `tunn-linux-386.tar.gz` - Linux 32-bit
+- `tunn-linux-arm64.tar.gz` - Linux ARM64
+- `tunn-linux-arm.tar.gz` - Linux ARM
+
+#### macOS
+- `tunn-darwin-amd64.tar.gz` - macOS Intel
+- `tunn-darwin-arm64.tar.gz` - macOS Apple Silicon (M1/M2)
+
+#### FreeBSD
+- `tunn-freebsd-amd64.tar.gz` - FreeBSD 64-bit
+
+**Installation Steps:**
+1. Download the appropriate binary for your platform
+2. Extract the archive
+3. Move the binary to a directory in your PATH
+4. Make it executable (Linux/macOS): `chmod +x tunn`
+
+**Verify your download** using the provided `checksums.txt` file.
 
 ### Build from Source
 
@@ -272,13 +298,34 @@ make clean
 make run
 ```
 
-### Contributing
+## Releases
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+This project uses automated GitHub Actions workflows to create releases with cross-platform binaries.
+
+### For Maintainers
+
+To create a new release:
+
+```bash
+# Linux/macOS
+./scripts/release.sh v1.0.0
+
+# Windows PowerShell  
+.\scripts\release.ps1 v1.0.0
+
+# Manual method
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+
+The release process automatically:
+- Builds binaries for all supported platforms
+- Creates compressed archives  
+- Generates SHA256 checksums
+- Creates a GitHub release with detailed changelog
+- Uploads all assets
+
+See [docs/RELEASE.md](docs/RELEASE.md) for detailed release documentation.
 
 ## Dependencies
 

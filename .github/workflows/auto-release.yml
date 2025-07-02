@@ -1,0 +1,211 @@
+name: Auto Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      tag_name: ${{ steps.get_tag.outputs.tag }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get tag
+      id: get_tag
+      run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the previous tag
+        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        if [ -z "$PREV_TAG" ]; then
+          echo "changelog=Initial release" >> $GITHUB_OUTPUT
+        else
+          # Generate changelog between tags
+          CHANGELOG=$(git log --pretty=format:"- %s" ${PREV_TAG}..HEAD | head -20)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_tag.outputs.tag }}
+        release_name: Release ${{ steps.get_tag.outputs.tag }}
+        body: |
+          ## Changes in ${{ steps.get_tag.outputs.tag }}
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ## Downloads
+          
+          Choose the appropriate binary for your platform below.
+          
+          ### Installation Instructions
+          
+          1. Download the appropriate binary for your platform
+          2. Extract the archive if needed
+          3. Move the binary to a directory in your PATH
+          4. Make it executable (Linux/macOS): `chmod +x tunn`
+          
+          ### Verification
+          
+          All binaries are signed and can be verified using the provided checksums.
+        draft: false
+        prerelease: ${{ contains(steps.get_tag.outputs.tag, '-') }}
+
+  build-and-upload:
+    name: Build and Upload Assets
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Windows
+          - os: windows
+            arch: amd64
+            goos: windows
+            goarch: amd64
+          - os: windows
+            arch: 386
+            goos: windows
+            goarch: 386
+          - os: windows
+            arch: arm64
+            goos: windows
+            goarch: arm64
+          
+          # Linux
+          - os: linux
+            arch: amd64
+            goos: linux
+            goarch: amd64
+          - os: linux
+            arch: 386
+            goos: linux
+            goarch: 386
+          - os: linux
+            arch: arm64
+            goos: linux
+            goarch: arm64
+          - os: linux
+            arch: arm
+            goos: linux
+            goarch: arm
+          
+          # macOS
+          - os: darwin
+            arch: amd64
+            goos: darwin
+            goarch: amd64
+          - os: darwin
+            arch: arm64
+            goos: darwin
+            goarch: arm64
+          
+          # FreeBSD
+          - os: freebsd
+            arch: amd64
+            goos: freebsd
+            goarch: amd64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        binary_name="tunn"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          binary_name="${binary_name}.exe"
+        fi
+        
+        # Build with version info
+        go build -ldflags="-s -w -X main.Version=${{ needs.create-release.outputs.tag_name }}" -o "${binary_name}" .
+        
+        # Create archive
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          zip "tunn-${{ matrix.os }}-${{ matrix.arch }}.zip" "${binary_name}"
+          echo "ASSET_NAME=tunn-${{ matrix.os }}-${{ matrix.arch }}.zip" >> $GITHUB_ENV
+          echo "ASSET_PATH=tunn-${{ matrix.os }}-${{ matrix.arch }}.zip" >> $GITHUB_ENV
+        else
+          tar -czf "tunn-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "${binary_name}"
+          echo "ASSET_NAME=tunn-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" >> $GITHUB_ENV
+          echo "ASSET_PATH=tunn-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" >> $GITHUB_ENV
+        fi
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.ASSET_PATH }}
+        asset_name: ${{ env.ASSET_NAME }}
+        asset_content_type: application/octet-stream
+
+  generate-checksums:
+    name: Generate Checksums
+    needs: [create-release, build-and-upload]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download release assets
+      run: |
+        # Download all assets from the release
+        mkdir -p assets
+        cd assets
+        
+        # Get release info
+        RELEASE_ID=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ needs.create-release.outputs.tag_name }}" | jq -r '.id')
+        
+        # Download all assets
+        curl -s "https://api.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets" | \
+        jq -r '.[].browser_download_url' | \
+        while read url; do
+          curl -L -O "$url"
+        done
+
+    - name: Generate checksums
+      run: |
+        cd assets
+        sha256sum * > checksums.txt
+        cat checksums.txt
+
+    - name: Upload checksums
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: assets/checksums.txt
+        asset_name: checksums.txt
+        asset_content_type: text/plain

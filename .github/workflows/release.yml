@@ -1,0 +1,198 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Windows builds
+          - os: windows
+            arch: amd64
+            goos: windows
+            goarch: amd64
+            binary_suffix: '.exe'
+          - os: windows
+            arch: 386
+            goos: windows
+            goarch: 386
+            binary_suffix: '.exe'
+          - os: windows
+            arch: arm64
+            goos: windows
+            goarch: arm64
+            binary_suffix: '.exe'
+          
+          # Linux builds
+          - os: linux
+            arch: amd64
+            goos: linux
+            goarch: amd64
+            binary_suffix: ''
+          - os: linux
+            arch: 386
+            goos: linux
+            goarch: 386
+            binary_suffix: ''
+          - os: linux
+            arch: arm64
+            goos: linux
+            goarch: arm64
+            binary_suffix: ''
+          - os: linux
+            arch: arm
+            goos: linux
+            goarch: arm
+            binary_suffix: ''
+          
+          # macOS builds
+          - os: darwin
+            arch: amd64
+            goos: darwin
+            goarch: amd64
+            binary_suffix: ''
+          - os: darwin
+            arch: arm64
+            goos: darwin
+            goarch: arm64
+            binary_suffix: ''
+          
+          # FreeBSD builds
+          - os: freebsd
+            arch: amd64
+            goos: freebsd
+            goarch: amd64
+            binary_suffix: ''
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        mkdir -p dist
+        binary_name="tunn-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.binary_suffix }}"
+        go build -ldflags="-s -w" -o "dist/${binary_name}" .
+        
+        # Create archives
+        cd dist
+        if [ "${{ matrix.os }}" = "windows" ]; then
+          zip "${binary_name%.exe}.zip" "${binary_name}"
+        else
+          tar -czf "${binary_name}.tar.gz" "${binary_name}"
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: tunn-${{ matrix.os }}-${{ matrix.arch }}
+        path: dist/*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release files
+      run: |
+        mkdir -p release
+        find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} release/ \;
+        ls -la release/
+
+    - name: Generate checksums
+      run: |
+        cd release
+        sha256sum * > checksums.txt
+        cat checksums.txt
+
+    - name: Extract tag name
+      id: tag
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.tag.outputs.tag }}
+        name: Release ${{ steps.tag.outputs.tag }}
+        body: |
+          ## What's Changed
+          
+          ### Downloads
+          
+          Choose the appropriate binary for your platform:
+          
+          #### Windows
+          - `tunn-windows-amd64.zip` - Windows 64-bit (Intel/AMD)
+          - `tunn-windows-386.zip` - Windows 32-bit
+          - `tunn-windows-arm64.zip` - Windows ARM64
+          
+          #### Linux
+          - `tunn-linux-amd64.tar.gz` - Linux 64-bit (Intel/AMD)
+          - `tunn-linux-386.tar.gz` - Linux 32-bit
+          - `tunn-linux-arm64.tar.gz` - Linux ARM64
+          - `tunn-linux-arm.tar.gz` - Linux ARM
+          
+          #### macOS
+          - `tunn-darwin-amd64.tar.gz` - macOS Intel
+          - `tunn-darwin-arm64.tar.gz` - macOS Apple Silicon (M1/M2)
+          
+          #### FreeBSD
+          - `tunn-freebsd-amd64.tar.gz` - FreeBSD 64-bit
+          
+          ### Installation
+          
+          1. Download the appropriate binary for your platform
+          2. Extract the archive
+          3. Move the binary to a directory in your PATH
+          4. Make it executable (Linux/macOS): `chmod +x tunn`
+          
+          ### Verification
+          
+          Verify the integrity of your download using the provided checksums in `checksums.txt`.
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/v1.0.0...${{ steps.tag.outputs.tag }}
+        files: |
+          release/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
