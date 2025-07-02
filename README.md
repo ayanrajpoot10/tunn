@@ -464,9 +464,3 @@ tunn --verbose proxy --proxy-host example.com --target-host target.com --ssh-use
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Version
-
-Current version: 1.0.0
-
-For the latest updates and releases, visit the project repository.
