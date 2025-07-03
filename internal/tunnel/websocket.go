@@ -53,7 +53,15 @@ func ReadHeaders(conn net.Conn) ([]byte, error) {
 func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payloadTemplate, frontDomain string, useTLS bool, conn net.Conn) (net.Conn, error) {
 	// 1. Connect or re-use an existing connection
 	if conn == nil {
-		address := net.JoinHostPort(proxyHost, proxyPort)
+		var address string
+		// If proxy host/port are provided, connect to proxy; otherwise connect directly to target
+		if proxyHost != "" && proxyPort != "" {
+			address = net.JoinHostPort(proxyHost, proxyPort)
+		} else {
+			// Direct mode - connect directly to target
+			address = net.JoinHostPort(targetHost, targetPort)
+		}
+
 		var err error
 		conn, err = net.Dial("tcp", address)
 		if err != nil {
@@ -64,8 +72,18 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payloadTemp
 	// Optional TLS upgrade (skip if it's already TLS)
 	if useTLS {
 		if _, isTLS := conn.(*tls.Conn); !isTLS {
+			var serverName string
+			// Use front domain for TLS if specified, otherwise use the appropriate host
+			if frontDomain != "" {
+				serverName = frontDomain
+			} else if proxyHost != "" {
+				serverName = proxyHost
+			} else {
+				serverName = targetHost
+			}
+
 			tlsConfig := &tls.Config{
-				ServerName: proxyHost,
+				ServerName: serverName,
 			}
 			conn = tls.Client(conn, tlsConfig)
 		}

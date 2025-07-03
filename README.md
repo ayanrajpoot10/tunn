@@ -157,7 +157,176 @@ All modes support these additional options:
 
 ## Configuration
 
-### Default Payload Template
+Tunn supports two configuration approaches: traditional CLI flags and Xray-like configuration files for advanced users.
+
+### Configuration Files (Xray-like)
+
+Tunn supports JSON and YAML configuration files for managing complex tunnel configurations with multiple profiles, routing rules, and environment variable substitution.
+
+#### Configuration Structure
+
+```json
+{
+  "log": {
+    "level": "info",
+    "access": "/var/log/tunn/access.log",
+    "error": "/var/log/tunn/error.log"
+  },
+  "inbounds": [...],
+  "outbounds": [...],
+  "routing": {...},
+  "dns": {...},
+  "profiles": [...]
+}
+```
+
+#### Profiles Section
+
+The `profiles` section is the main configuration area for tunnel definitions:
+
+```json
+{
+  "profiles": [
+    {
+      "name": "default",
+      "mode": "proxy",
+      "proxyHost": "proxy.example.com",
+      "proxyPort": "80",
+      "targetHost": "target.example.com",
+      "targetPort": "22",
+      "frontDomain": "google.com",
+      "ssh": {
+        "username": "user",
+        "password": "password",
+        "port": "22"
+      },
+      "localPort": 1080,
+      "proxyType": "socks5",
+      "payload": "GET / HTTP/1.1\\r\\nHost: $FRONT_DOMAIN\\r\\nUpgrade: websocket\\r\\n\\r\\n",
+      "timeout": 30
+    }
+  ]
+}
+```
+
+#### Configuration Management Commands
+
+```bash
+# Generate sample configuration
+tunn config generate --output tunn-config.json --format json
+tunn config generate --output tunn-config.yaml --format yaml
+
+# Validate configuration
+tunn config validate --config tunn-config.json
+
+# List available profiles
+tunn config list --config tunn-config.json
+
+# Use configuration with profiles
+tunn --config tunn-config.json --profile default proxy
+tunn --config tunn-config.json --profile sni-mode sni
+
+# Override configuration with CLI flags
+tunn --config tunn-config.json --profile default --proxy-type http proxy
+```
+
+#### Environment Variables in Configuration
+
+Configuration files support environment variable substitution using the `$VARIABLE` syntax:
+
+```json
+{
+  "profiles": [
+    {
+      "name": "production",
+      "targetHost": "$TARGET_HOST",
+      "ssh": {
+        "username": "$SSH_USERNAME",
+        "password": "$SSH_PASSWORD"
+      }
+    }
+  ]
+}
+```
+
+Set environment variables before running:
+
+```bash
+export TARGET_HOST="prod.example.com"
+export SSH_USERNAME="admin"
+export SSH_PASSWORD="secret"
+
+tunn --config config.json --profile production proxy
+```
+
+#### Advanced Configuration Features
+
+**Routing Rules:**
+
+```json
+{
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "domain": ["geosite:cn"],
+        "outboundTag": "freedom"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:private"],
+        "outboundTag": "freedom"
+      }
+    ]
+  }
+}
+```
+
+**Inbound/Outbound Configuration:**
+
+```json
+{
+  "inbounds": [
+    {
+      "tag": "socks-in",
+      "port": 1080,
+      "listen": "127.0.0.1",
+      "protocol": "socks"
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "tunnel-out", 
+      "protocol": "tunnel",
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls"
+      }
+    }
+  ]
+}
+```
+
+**DNS Configuration:**
+
+```json
+{
+  "dns": {
+    "hosts": {
+      "example.com": "127.0.0.1"
+    },
+    "servers": [
+      "8.8.8.8",
+      "1.1.1.1"
+    ]
+  }
+}
+```
+
+### CLI Configuration (Traditional)
+
+#### Default Payload Template
 
 ```
 GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]
@@ -167,7 +336,7 @@ Placeholders:
 - `[host]`: Replaced with target host or front domain
 - `[crlf]`: Replaced with `\r\n`
 
-### Custom Payloads
+#### Custom Payloads
 
 You can specify custom HTTP payloads for different environments:
 
@@ -431,6 +600,28 @@ The release process automatically:
 - **Proxy Logs**: Be aware that proxy servers may log connection attempts.
 
 ## Troubleshooting
+
+### Configuration File Issues
+
+**Invalid Configuration**: Use `tunn config validate` to check for syntax errors
+
+**Missing Required Fields**: Ensure all required fields are present in profiles
+
+**Environment Variables**: Make sure environment variables are set before running
+
+**File Permissions**: Ensure the configuration file is readable
+
+**Debug Mode**: Use verbose mode to see configuration loading details:
+
+```bash
+tunn --config config.json --profile myprofile --verbose proxy
+```
+
+This will show:
+- Configuration file loading status
+- Profile selection
+- Environment variable substitution
+- Validation results
 
 ### Common Issues
 
