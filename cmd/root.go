@@ -35,23 +35,12 @@ Available tunnel modes (configured via config file):
   sni           - SNI fronting strategy  
   direct        - Direct connection with front domain spoofing
 
-Configuration must be provided via JSON/YAML configuration file:
+Configuration must be provided via JSON configuration file:
   tunn --config config.json
-
-Example configuration file (config.json):
-{
-  "mode": "proxy",
-  "targetHost": "target.example.com",
-  "proxyHost": "proxy.example.com",
-  "ssh": {
-    "username": "user",
-    "password": "pass"
-  }
-}
 
 To generate sample configurations:
   tunn config generate --mode proxy --output proxy-config.json
-  tunn config generate --mode sni --output sni-config.yaml --format yaml
+  tunn config generate --mode sni --output sni-config.json
   tunn config generate --mode direct --output direct-config.json
 
 To validate a configuration:
@@ -76,7 +65,7 @@ To validate a configuration:
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			fmt.Printf("✓ Configuration loaded from: %s\n", configFile)
+			fmt.Printf("Configuration loaded from: %s\n", configFile)
 		}
 		return nil
 	},
@@ -93,7 +82,7 @@ func Execute() {
 
 func init() {
 	// Config file flag (required for main command, but not for config subcommands)
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "path to configuration file (JSON/YAML) - required")
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "path to configuration file (JSON) - required")
 
 	// Disable built-in commands
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -187,7 +176,7 @@ func runTunnelWithConfigSNI(config *tunnel.Config, globalProxyType string) {
 	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
 
 	// Connect to proxy with SNI fronting
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", config.ProxyHost, config.ProxyPort))
+	conn, err := net.Dial("tcp", net.JoinHostPort(config.ProxyHost, config.ProxyPort))
 	if err != nil {
 		log.Fatalf("Error connecting to proxy: %v", err)
 	}
@@ -238,8 +227,7 @@ func runTunnelWithConfigDirect(config *tunnel.Config, globalProxyType string) {
 
 	// Establish direct WebSocket connection
 	conn, err := tunnel.EstablishWSTunnel(
-		config.TargetHost,
-		config.TargetPort,
+		"", "",
 		config.TargetHost,
 		config.TargetPort,
 		config.Payload,

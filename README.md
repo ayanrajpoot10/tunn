@@ -65,7 +65,7 @@ make build-all
 
 ## Usage
 
-Tunn supports multiple tunneling strategies and requires configuration via JSON/YAML files. All modes support both SOCKS5 and HTTP local proxy types configured in the config file.
+Tunn supports multiple tunneling strategies and requires configuration via JSON files. All modes support both SOCKS5 and HTTP local proxy types configured in the config file.
 
 ### Configuration-Only Approach
 
@@ -78,7 +78,7 @@ tunn --config myconfig.json
 
 # Generate sample configurations
 tunn config generate --mode proxy --output proxy-config.json
-tunn config generate --mode sni --output sni-config.yaml --format yaml
+tunn config generate --mode sni --output sni-config.json
 tunn config generate --mode direct --output direct-config.json
 
 # Validate configurations
@@ -87,7 +87,7 @@ tunn config validate --config myconfig.json
 
 ### Configuration File Structure
 
-All tunnel configurations are defined in JSON or YAML files:
+All tunnel configurations are defined in JSON files:
 
 **Example config.json:**
 ```json
@@ -109,19 +109,21 @@ All tunnel configurations are defined in JSON or YAML files:
 }
 ```
 
-**Example config.yaml:**
-```yaml
-mode: direct
-targetHost: ssh-server.com
-targetPort: "22"
-frontDomain: google.com
-ssh:
-  username: user
-  password: password
-  port: "22"
-localPort: 1080
-proxyType: http
-timeout: 30
+**Example config.json:**
+```json
+{
+  "mode": "direct",
+  "targetHost": "ssh-server.com",
+  "targetPort": "22",
+  "frontDomain": "google.com",
+  "ssh": {
+    "username": "user",
+    "password": "password"
+  },
+  "localPort": 1080,
+  "proxyType": "socks5",
+  "timeout": 30
+}
 ```
 
 ### Tunnel Modes
@@ -210,7 +212,7 @@ All configuration files support these options:
 ```bash
 # Generate sample configurations for different modes
 tunn config generate --mode proxy --output proxy-config.json
-tunn config generate --mode sni --output sni-config.yaml --format yaml  
+tunn config generate --mode sni --output sni-config.json
 tunn config generate --mode direct --output direct-config.json
 
 # Validate your configuration
@@ -352,20 +354,23 @@ Configure your browser to use HTTP proxy 127.0.0.1:8080
 
 ### Example 3: SNI Fronting for CDN Bypass
 
-Create `sni-fronting.yaml`:
-```yaml
-mode: sni
-frontDomain: cloudflare.com
-proxyHost: edge-server.com
-targetHost: hidden-server.com
-ssh:
-  username: user
-  password: pass
-localPort: 1080
-proxyType: socks5
+Create `sni-fronting.json`:
+```json
+{
+  "mode": "sni",
+  "frontDomain": "cloudflare.com",
+  "proxyHost": "edge-server.com",
+  "targetHost": "hidden-server.com",
+  "ssh": {
+    "username": "user",
+    "password": "pass"
+  },
+  "localPort": 1080,
+  "proxyType": "socks5"
+}
 ```
 
-Run: `tunn --config sni-fronting.yaml`
+Run: `tunn --config sni-fronting.json`
 
 ### Example 4: Direct Connection with Domain Spoofing
 

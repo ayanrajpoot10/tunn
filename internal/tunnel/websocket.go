@@ -50,7 +50,7 @@ func ReadHeaders(conn net.Conn) ([]byte, error) {
 }
 
 // EstablishWSTunnel performs the WebSocket upgrade handshake
-func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payloadTemplate, frontDomain string, useTLS bool, conn net.Conn) (net.Conn, error) {
+func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, frontDomain string, useTLS bool, conn net.Conn) (net.Conn, error) {
 	// 1. Connect or re-use an existing connection
 	if conn == nil {
 		var address string
@@ -90,7 +90,7 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payloadTemp
 	}
 
 	// 2. Build payload blocks
-	payloadBytes := ReplacePlaceholders(payloadTemplate, targetHost, targetPort, frontDomain)
+	payloadBytes := ReplacePlaceholders(payload, targetHost, targetPort, frontDomain)
 	blocks := bytes.Split(payloadBytes, []byte("\r\n\r\n"))
 
 	// 3. Send first block

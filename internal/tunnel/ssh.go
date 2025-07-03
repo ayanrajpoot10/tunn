@@ -702,7 +702,7 @@ func (s *SSHOverWebSocket) openSSHChannel(clientConn net.Conn, host string, port
 }
 
 // ConnectViaWSAndStartSOCKS is a convenience function to start everything
-func ConnectViaWSAndStartSOCKS(wsConn net.Conn, sshUser, sshPassword, sshPort string, localSOCKSPort int) (*SSHOverWebSocket, error) {
+func ConnectViaWSAndStartSOCKS(wsConn net.Conn, sshUser, sshPassword, sshPort string, localPort int) (*SSHOverWebSocket, error) {
 	connector := NewSSHOverWebSocket(wsConn, sshUser, sshPassword, sshPort)
 
 	err := connector.StartSSHTransport()
@@ -710,7 +710,7 @@ func ConnectViaWSAndStartSOCKS(wsConn net.Conn, sshUser, sshPassword, sshPort st
 		return nil, err
 	}
 
-	err = connector.OpenSOCKSProxy(localSOCKSPort)
+	err = connector.OpenSOCKSProxy(localPort)
 	if err != nil {
 		return nil, err
 	}
@@ -719,7 +719,7 @@ func ConnectViaWSAndStartSOCKS(wsConn net.Conn, sshUser, sshPassword, sshPort st
 }
 
 // ConnectViaWSAndStartHTTP is a convenience function to start HTTP proxy
-func ConnectViaWSAndStartHTTP(wsConn net.Conn, sshUser, sshPassword, sshPort string, localHTTPPort int) (*SSHOverWebSocket, error) {
+func ConnectViaWSAndStartHTTP(wsConn net.Conn, sshUser, sshPassword, sshPort string, localPort int) (*SSHOverWebSocket, error) {
 	connector := NewSSHOverWebSocket(wsConn, sshUser, sshPassword, sshPort)
 
 	err := connector.StartSSHTransport()
@@ -727,7 +727,7 @@ func ConnectViaWSAndStartHTTP(wsConn net.Conn, sshUser, sshPassword, sshPort str
 		return nil, err
 	}
 
-	err = connector.OpenHTTPProxy(localHTTPPort)
+	err = connector.OpenHTTPProxy(localPort)
 	if err != nil {
 		return nil, err
 	}

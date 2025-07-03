@@ -8,7 +8,6 @@ import (
 	"tunn/internal/tunnel"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // configCmd represents the config command
@@ -40,7 +39,6 @@ var validateFlags struct {
 
 var generateFlags struct {
 	output string
-	format string
 	mode   string
 }
 
@@ -50,7 +48,6 @@ func init() {
 	configCmd.AddCommand(validateCmd)
 
 	generateCmd.Flags().StringVarP(&generateFlags.output, "output", "o", "tunn-config.json", "output file path")
-	generateCmd.Flags().StringVarP(&generateFlags.format, "format", "f", "json", "output format: json or yaml")
 	generateCmd.Flags().StringVarP(&generateFlags.mode, "mode", "m", "proxy", "tunnel mode: proxy, sni, or direct")
 
 	validateCmd.Flags().StringVarP(&validateFlags.configPath, "config", "c", "", "path to configuration file to validate (required)")
@@ -77,7 +74,7 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			},
 			LocalPort: 1080,
 			ProxyType: "socks5",
-			Payload:   "GET / HTTP/1.1\r\nHost: $FRONT_DOMAIN\r\nUpgrade: websocket\r\n\r\n",
+			Payload:   "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
 			Timeout:   30,
 		}
 	case "sni":
@@ -95,6 +92,7 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			},
 			LocalPort: 1080,
 			ProxyType: "socks5",
+			Payload:   "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
 			Timeout:   30,
 		}
 	case "direct":
@@ -110,38 +108,31 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			},
 			LocalPort: 1080,
 			ProxyType: "http",
+			Payload:   "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
 			Timeout:   30,
 		}
 	default:
-		fmt.Printf("❌ Unsupported mode: %s (supported: proxy, sni, direct)\n", generateFlags.mode)
+		fmt.Printf("Error: Unsupported mode: %s (supported: proxy, sni, direct)\n", generateFlags.mode)
 		os.Exit(1)
 	}
 
 	var data []byte
 	var err error
 
-	switch generateFlags.format {
-	case "yaml", "yml":
-		data, err = yaml.Marshal(sampleConfig)
-	case "json":
-		data, err = json.MarshalIndent(sampleConfig, "", "  ")
-	default:
-		fmt.Printf("❌ Unsupported format: %s\n", generateFlags.format)
-		os.Exit(1)
-	}
+	data, err = json.MarshalIndent(sampleConfig, "", "  ")
 
 	if err != nil {
-		fmt.Printf("❌ Failed to marshal config: %v\n", err)
+		fmt.Printf("Error: Failed to marshal config: %v\n", err)
 		os.Exit(1)
 	}
 
 	if err := os.WriteFile(generateFlags.output, data, 0644); err != nil {
-		fmt.Printf("❌ Failed to write config file: %v\n", err)
+		fmt.Printf("Error: Failed to write config file: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Sample %s mode configuration generated: %s\n", generateFlags.mode, generateFlags.output)
-	fmt.Println("\n📝 Remember to:")
+	fmt.Printf("Success: Sample %s mode configuration generated: %s\n", generateFlags.mode, generateFlags.output)
+	fmt.Println("\nRemember to:")
 	fmt.Println("   1. Update target host and SSH credentials")
 	fmt.Println("   2. Modify proxy settings if needed")
 	fmt.Println("   3. Validate the config with: tunn config validate --config", generateFlags.output)
@@ -150,20 +141,20 @@ func generateConfig(cmd *cobra.Command, args []string) {
 func validateConfig(cmd *cobra.Command, args []string) {
 	configPath := validateFlags.configPath
 	if configPath == "" {
-		fmt.Println("❌ No config file specified. Use --config flag.")
+		fmt.Println("Error: No config file specified. Use --config flag.")
 		os.Exit(1)
 	}
 
 	configMgr := tunnel.NewConfigManager(configPath)
 	if err := configMgr.LoadConfig(); err != nil {
-		fmt.Printf("❌ Configuration validation failed: %v\n", err)
+		fmt.Printf("Error: Configuration validation failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	config := configMgr.GetConfig()
 
-	fmt.Printf("✓ Configuration file is valid: %s\n", configPath)
-	fmt.Printf("📊 Configuration Summary:\n")
+	fmt.Printf("Success: Configuration file is valid: %s\n", configPath)
+	fmt.Printf("Configuration Summary:\n")
 	fmt.Printf("   - Mode: %s\n", config.Mode)
 	fmt.Printf("   - Target: %s:%s\n", config.TargetHost, config.TargetPort)
 	if config.ProxyHost != "" {
