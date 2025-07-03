@@ -50,7 +50,7 @@ Requires Go 1.21 or later:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/ayanrajpoot10/tunn.git
 cd Tunn
 
 # Install dependencies

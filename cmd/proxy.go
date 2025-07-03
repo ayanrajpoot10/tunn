@@ -45,21 +45,21 @@ The local proxy type can be controlled with the global --proxy-type flag:
 
 Configuration Methods:
   1. Command line flags (this command)
-  2. Configuration file with profile (use: tunn --config config.json --profile myprofile)
+  2. Configuration file (use: tunn --config config.json)
 
 Example usage:
   # Basic proxy mode with SOCKS5 local proxy (default)
   tunn proxy --proxy-host proxy.example.com --target-host target.example.com --ssh-username user --ssh-password pass
   
-  # Using configuration profile (no need to specify 'proxy' mode)
-  tunn --config tunn-config.json --profile default`,
+  # Using configuration file
+  tunn --config tunn-config.json`,
 	Run: runProxyTunnel,
 }
 
 func runProxyTunnel(cmd *cobra.Command, args []string) {
-	// Check if using config file and profile
-	if configFile != "" && profile != "" {
-		runWithProfile("proxy")
+	// Check if using config file
+	if configFile != "" {
+		runWithConfigProxy()
 		return
 	}
 
@@ -73,18 +73,18 @@ func runProxyTunnel(cmd *cobra.Command, args []string) {
 		log.Fatal("Error: --proxy-type must be either 'socks5' or 'http'")
 	}
 
-	// Validate required flags when not using profile
+	// Validate required flags when not using config file
 	if proxyFlags.proxyHost == "" {
-		log.Fatal("Error: --proxy-host is required (or use --config and --profile)")
+		log.Fatal("Error: --proxy-host is required (or use --config)")
 	}
 	if proxyFlags.targetHost == "" {
-		log.Fatal("Error: --target-host is required (or use --config and --profile)")
+		log.Fatal("Error: --target-host is required (or use --config)")
 	}
 	if proxyFlags.sshUsername == "" {
-		log.Fatal("Error: --ssh-username is required (or use --config and --profile)")
+		log.Fatal("Error: --ssh-username is required (or use --config)")
 	}
 	if proxyFlags.sshPassword == "" {
-		log.Fatal("Error: --ssh-password is required (or use --config and --profile)")
+		log.Fatal("Error: --ssh-password is required (or use --config)")
 	}
 
 	// Set default values
@@ -235,19 +235,19 @@ func runProxyTunnel(cmd *cobra.Command, args []string) {
 	}
 }
 
-func printProxyConfig(cfg *tunnel.Config) {
+func printProxyConfig(config *tunnel.Config) {
 	fmt.Println("HTTP Proxy Tunnel Configuration:")
-	fmt.Printf("  Proxy Host: %s (connect here first)\n", cfg.ProxyHost)
-	fmt.Printf("  Proxy Port: %s\n", cfg.ProxyPort)
-	fmt.Printf("  Target Host: %s (SSH server through proxy)\n", cfg.TargetHost)
-	fmt.Printf("  Target Port: %s\n", cfg.TargetPort)
-	if cfg.FrontDomain != "" {
-		fmt.Printf("  Front Domain: %s (used for Host header spoofing)\n", cfg.FrontDomain)
+	fmt.Printf("  Proxy Host: %s (connect here first)\n", config.ProxyHost)
+	fmt.Printf("  Proxy Port: %s\n", config.ProxyPort)
+	fmt.Printf("  Target Host: %s (SSH server through proxy)\n", config.TargetHost)
+	fmt.Printf("  Target Port: %s\n", config.TargetPort)
+	if config.FrontDomain != "" {
+		fmt.Printf("  Front Domain: %s (used for Host header spoofing)\n", config.FrontDomain)
 	}
-	fmt.Printf("  Local SOCKS Port: %d\n", cfg.LocalSOCKSPort)
-	fmt.Printf("  SSH Username: %s\n", cfg.SSHUsername)
-	fmt.Printf("  SSH Port: %s\n", cfg.SSHPort)
-	fmt.Printf("  Payload Template: %s\n", cfg.PayloadTemplate)
+	fmt.Printf("  Local SOCKS Port: %d\n", config.LocalPort)
+	fmt.Printf("  SSH Username: %s\n", config.SSH.Username)
+	fmt.Printf("  SSH Port: %s\n", config.SSH.Port)
+	fmt.Printf("  Payload Template: %s\n", config.Payload)
 	fmt.Println()
 }
 
@@ -274,26 +274,22 @@ func init() {
 	// Note: Required flags are now validated conditionally in the run function
 }
 
-// runWithProfile executes tunnel using configuration profile
-func runWithProfile(expectedMode string) {
+// runWithConfigProxy executes proxy tunnel using configuration file
+func runWithConfigProxy() {
 	configMgr := GetConfigManager()
 	if configMgr == nil {
 		log.Fatal("Error: Configuration manager not initialized")
 	}
 
-	profileConfig, err := configMgr.GetProfile(profile)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
+	config := configMgr.GetConfig()
+	if config == nil {
+		log.Fatal("Error: No configuration loaded")
 	}
 
 	// Validate mode matches
-	if profileConfig.Mode != expectedMode {
-		log.Fatalf("Error: Profile '%s' is configured for mode '%s', but '%s' mode was requested",
-			profile, profileConfig.Mode, expectedMode)
+	if config.Mode != "proxy" {
+		log.Fatalf("Error: Configuration is set for mode '%s', but proxy mode was requested", config.Mode)
 	}
-
-	// Convert profile to legacy config
-	cfg := configMgr.ConvertProfileToLegacyConfig(profileConfig)
 
 	// Override with CLI proxy type if specified
 	globalProxyType := GetProxyType()
@@ -301,36 +297,35 @@ func runWithProfile(expectedMode string) {
 		log.Fatal("Error: --proxy-type must be either 'socks5' or 'http'")
 	}
 
-	fmt.Printf("[*] Using profile: %s\n", profileConfig.Name)
-	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", cfg.Mode, globalProxyType)
+	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", config.Mode, globalProxyType)
 
-	// Execute the tunnel with the profile configuration
-	runTunnelWithConfig(cfg, globalProxyType)
+	// Execute the tunnel with the configuration
+	runTunnelWithConfig(config, globalProxyType)
 }
 
 // runTunnelWithConfig executes the tunnel with the given configuration
-func runTunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
-	fmt.Printf("[*] Proxy: %s:%s\n", cfg.ProxyHost, cfg.ProxyPort)
-	fmt.Printf("[*] Target: %s:%s\n", cfg.TargetHost, cfg.TargetPort)
-	fmt.Printf("[*] SSH User: %s\n", cfg.SSHUsername)
-	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, cfg.LocalSOCKSPort)
+func runTunnelWithConfig(config *tunnel.Config, globalProxyType string) {
+	fmt.Printf("[*] Proxy: %s:%s\n", config.ProxyHost, config.ProxyPort)
+	fmt.Printf("[*] Target: %s:%s\n", config.TargetHost, config.TargetPort)
+	fmt.Printf("[*] SSH User: %s\n", config.SSH.Username)
+	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
 
-	if cfg.FrontDomain != "" {
-		fmt.Printf("[*] Front Domain: %s\n", cfg.FrontDomain)
+	if config.FrontDomain != "" {
+		fmt.Printf("[*] Front Domain: %s\n", config.FrontDomain)
 	}
 
 	if verbose {
-		printProxyConfig(cfg)
+		printProxyConfig(config)
 	}
 
 	// Establish HTTP proxy tunnel
 	conn, err := tunnel.EstablishWSTunnel(
-		cfg.ProxyHost,
-		cfg.ProxyPort,
-		cfg.TargetHost,
-		cfg.TargetPort,
-		cfg.PayloadTemplate,
-		cfg.FrontDomain,
+		config.ProxyHost,
+		config.ProxyPort,
+		config.TargetHost,
+		config.TargetPort,
+		config.Payload,
+		config.FrontDomain,
 		false,
 		nil,
 	)
@@ -340,7 +335,7 @@ func runTunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 	defer conn.Close()
 
 	fmt.Printf("[*] Connected to proxy %s:%s, tunneling to target %s:%s\n",
-		cfg.ProxyHost, cfg.ProxyPort, cfg.TargetHost, cfg.TargetPort)
+		config.ProxyHost, config.ProxyPort, config.TargetHost, config.TargetPort)
 
 	fmt.Printf("[*] Starting SSH connection and %s proxy...\n", globalProxyType)
 
@@ -358,18 +353,18 @@ func runTunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 		if globalProxyType == "http" {
 			sshConn, err = tunnel.ConnectViaWSAndStartHTTP(
 				conn,
-				cfg.SSHUsername,
-				cfg.SSHPassword,
-				cfg.SSHPort,
-				cfg.LocalSOCKSPort,
+				config.SSH.Username,
+				config.SSH.Password,
+				config.SSH.Port,
+				config.LocalPort,
 			)
 		} else {
 			sshConn, err = tunnel.ConnectViaWSAndStartSOCKS(
 				conn,
-				cfg.SSHUsername,
-				cfg.SSHPassword,
-				cfg.SSHPort,
-				cfg.LocalSOCKSPort,
+				config.SSH.Username,
+				config.SSH.Password,
+				config.SSH.Port,
+				config.LocalPort,
 			)
 		}
 		sshResultChan <- sshResult{conn: sshConn, err: err}
@@ -382,13 +377,13 @@ func runTunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 			log.Fatalf("Error starting SSH connection: %v", result.err)
 		}
 		sshConn = result.conn
-		fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, cfg.LocalSOCKSPort)
+		fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
 		fmt.Printf("[+] All traffic through that proxy is forwarded over SSH via WS tunnel.\n")
 
 		if globalProxyType == "socks5" {
-			fmt.Printf("[+] Configure your applications to use SOCKS5 proxy 127.0.0.1:%d\n", cfg.LocalSOCKSPort)
+			fmt.Printf("[+] Configure your applications to use SOCKS5 proxy 127.0.0.1:%d\n", config.LocalPort)
 		} else {
-			fmt.Printf("[+] Configure your applications to use HTTP proxy 127.0.0.1:%d\n", cfg.LocalSOCKSPort)
+			fmt.Printf("[+] Configure your applications to use HTTP proxy 127.0.0.1:%d\n", config.LocalPort)
 		}
 
 	case <-time.After(30 * time.Second):

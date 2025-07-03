@@ -47,15 +47,15 @@ Example usage:
   # Basic direct connection with SOCKS5 proxy (default)
   tunn direct --front-domain google.com --target-host target.example.com --ssh-username user --ssh-password pass
   
-  # Using configuration profile (no need to specify 'direct' mode)
-  tunn --config config.json --profile direct-profile`,
+  # Using configuration file
+  tunn --config config.json`,
 	Run: runDirectTunnel,
 }
 
 func runDirectTunnel(cmd *cobra.Command, args []string) {
-	// Check if using config file and profile
-	if configFile != "" && profile != "" {
-		runWithProfileDirect("direct")
+	// Check if using config file
+	if configFile != "" {
+		runWithConfigDirect()
 		return
 	}
 
@@ -82,7 +82,7 @@ func runDirectTunnel(cmd *cobra.Command, args []string) {
 
 	// Set defaults
 	if directFlags.targetPort == "" {
-		directFlags.targetPort = "443"
+		directFlags.targetPort = "80"
 	}
 	if directFlags.sshPort == "" {
 		directFlags.sshPort = "22"
@@ -182,31 +182,27 @@ func runDirectTunnel(cmd *cobra.Command, args []string) {
 	}
 }
 
-// runWithProfileDirect executes direct tunnel using configuration profile
-func runWithProfileDirect(expectedMode string) {
+// runWithConfigDirect executes direct tunnel using configuration file
+func runWithConfigDirect() {
 	configMgr := GetConfigManager()
 	if configMgr == nil {
 		log.Fatal("Error: Configuration manager not initialized")
 	}
 
-	profileConfig, err := configMgr.GetProfile(profile)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
+	config := configMgr.GetConfig()
+	if config == nil {
+		log.Fatal("Error: No configuration loaded")
 	}
 
 	// Validate mode matches
-	if profileConfig.Mode != expectedMode {
-		log.Fatalf("Error: Profile '%s' is configured for mode '%s', but '%s' mode was requested",
-			profile, profileConfig.Mode, expectedMode)
+	if config.Mode != "direct" {
+		log.Fatalf("Error: Configuration is set for mode '%s', but direct mode was requested", config.Mode)
 	}
 
-	// Convert profile to legacy config
-	cfg := configMgr.ConvertProfileToLegacyConfig(profileConfig)
-
-	// Determine proxy type: use profile setting if available, otherwise use CLI flag
+	// Determine proxy type: use config setting if available, otherwise use CLI flag
 	var effectiveProxyType string
-	if profileConfig.ProxyType != "" {
-		effectiveProxyType = profileConfig.ProxyType
+	if config.ProxyType != "" {
+		effectiveProxyType = config.ProxyType
 	} else {
 		effectiveProxyType = GetProxyType()
 	}
@@ -216,11 +212,10 @@ func runWithProfileDirect(expectedMode string) {
 		log.Fatal("Error: proxy type must be either 'socks5' or 'http'")
 	}
 
-	fmt.Printf("[*] Using profile: %s\n", profileConfig.Name)
-	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", cfg.Mode, effectiveProxyType)
+	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", config.Mode, effectiveProxyType)
 
-	// Execute the tunnel with the profile configuration
-	runDirectTunnelWithConfig(cfg, effectiveProxyType)
+	// Execute the tunnel with the configuration
+	runDirectTunnelWithConfig(config, effectiveProxyType)
 }
 
 // runDirectTunnelWithConfig executes the direct tunnel with the given configuration
@@ -335,7 +330,7 @@ func init() {
 
 	// Network configuration flags
 	directCmd.Flags().StringVar(&directFlags.targetHost, "target-host", "", "target host (required unless using config)")
-	directCmd.Flags().StringVar(&directFlags.targetPort, "target-port", "443", "target port")
+	directCmd.Flags().StringVar(&directFlags.targetPort, "target-port", "80", "target port")
 
 	// SSH configuration flags
 	directCmd.Flags().StringVarP(&directFlags.sshUsername, "ssh-username", "u", "", "SSH username (required unless using config)")
@@ -347,5 +342,4 @@ func init() {
 	directCmd.Flags().IntVarP(&directFlags.localPort, "local-port", "l", 1080, "local SOCKS proxy port")
 	directCmd.Flags().IntVarP(&directFlags.timeout, "timeout", "t", 0, "connection timeout in seconds (0 = no timeout)")
 
-	// Note: Required flags are now validated conditionally in the run function
 }

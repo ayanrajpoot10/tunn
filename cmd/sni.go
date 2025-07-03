@@ -51,15 +51,15 @@ Example usage:
   # Basic SNI fronting with SOCKS5 proxy (default)
   tunn sni --front-domain google.com --proxy-host proxy.example.com --target-host target.example.com --ssh-username user --ssh-password pass
   
-  # Using configuration profile (no need to specify 'sni' mode)
-  tunn --config config.json --profile sni-profile`,
+  # Using configuration file
+  tunn --config config.json`,
 	Run: runSNITunnel,
 }
 
 func runSNITunnel(cmd *cobra.Command, args []string) {
-	// Check if using config file and profile
-	if configFile != "" && profile != "" {
-		runWithProfileSNI("sni")
+	// Check if using config file
+	if configFile != "" {
+		runWithConfigSNI()
 		return
 	}
 
@@ -113,38 +113,19 @@ func runSNITunnel(cmd *cobra.Command, args []string) {
 
 	// Create configuration
 	cfg := &tunnel.Config{
-		Mode:            "sni",
-		FrontDomain:     sniFlags.frontDomain,
-		LocalSOCKSPort:  sniFlags.localPort,
-		ProxyHost:       sniFlags.proxyHost,
-		ProxyPort:       sniFlags.proxyPort,
-		TargetHost:      sniFlags.targetHost,
-		TargetPort:      sniFlags.targetPort,
-		SSHUsername:     sniFlags.sshUsername,
-		SSHPassword:     sniFlags.sshPassword,
-		SSHPort:         sniFlags.sshPort,
-		PayloadTemplate: sniFlags.payload,
-	}
-	if sniFlags.proxyPort != "" {
-		cfg.ProxyPort = sniFlags.proxyPort
-	}
-	if sniFlags.targetHost != "" {
-		cfg.TargetHost = sniFlags.targetHost
-	}
-	if sniFlags.targetPort != "" {
-		cfg.TargetPort = sniFlags.targetPort
-	}
-	if sniFlags.sshUsername != "" {
-		cfg.SSHUsername = sniFlags.sshUsername
-	}
-	if sniFlags.sshPassword != "" {
-		cfg.SSHPassword = sniFlags.sshPassword
-	}
-	if sniFlags.sshPort != "" {
-		cfg.SSHPort = sniFlags.sshPort
-	}
-	if sniFlags.payload != "" {
-		cfg.PayloadTemplate = sniFlags.payload
+		Mode:        "sni",
+		FrontDomain: sniFlags.frontDomain,
+		LocalPort:   sniFlags.localPort,
+		ProxyHost:   sniFlags.proxyHost,
+		ProxyPort:   sniFlags.proxyPort,
+		TargetHost:  sniFlags.targetHost,
+		TargetPort:  sniFlags.targetPort,
+		SSH: tunnel.SSHConfig{
+			Username: sniFlags.sshUsername,
+			Password: sniFlags.sshPassword,
+			Port:     sniFlags.sshPort,
+		},
+		Payload: sniFlags.payload,
 	}
 
 	if verbose {
@@ -176,7 +157,7 @@ func runSNITunnel(cmd *cobra.Command, args []string) {
 		"", "", // proxy host/port not needed, we already have the connection
 		cfg.TargetHost,
 		cfg.TargetPort,
-		cfg.PayloadTemplate,
+		cfg.Payload,
 		"",      // no front domain spoofing for SNI fronted (using TLS SNI instead)
 		true,    // use_tls
 		tlsConn, // existing TLS connection
@@ -192,18 +173,18 @@ func runSNITunnel(cmd *cobra.Command, args []string) {
 	if globalProxyType == "http" {
 		sshConn, err = tunnel.ConnectViaWSAndStartHTTP(
 			conn,
-			cfg.SSHUsername,
-			cfg.SSHPassword,
-			cfg.SSHPort,
-			cfg.LocalSOCKSPort,
+			cfg.SSH.Username,
+			cfg.SSH.Password,
+			cfg.SSH.Port,
+			cfg.LocalPort,
 		)
 	} else {
 		sshConn, err = tunnel.ConnectViaWSAndStartSOCKS(
 			conn,
-			cfg.SSHUsername,
-			cfg.SSHPassword,
-			cfg.SSHPort,
-			cfg.LocalSOCKSPort,
+			cfg.SSH.Username,
+			cfg.SSH.Password,
+			cfg.SSH.Port,
+			cfg.LocalPort,
 		)
 	}
 	if err != nil {
@@ -211,13 +192,13 @@ func runSNITunnel(cmd *cobra.Command, args []string) {
 	}
 	defer sshConn.Close()
 
-	fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, cfg.LocalSOCKSPort)
+	fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, cfg.LocalPort)
 	fmt.Printf("[+] All traffic through that proxy is forwarded over SSH via WS tunnel.\n")
 
 	if globalProxyType == "socks5" {
-		fmt.Printf("[+] Configure your applications to use SOCKS5 proxy 127.0.0.1:%d\n", cfg.LocalSOCKSPort)
+		fmt.Printf("[+] Configure your applications to use SOCKS5 proxy 127.0.0.1:%d\n", cfg.LocalPort)
 	} else {
-		fmt.Printf("[+] Configure your applications to use HTTP proxy 127.0.0.1:%d\n", cfg.LocalSOCKSPort)
+		fmt.Printf("[+] Configure your applications to use HTTP proxy 127.0.0.1:%d\n", cfg.LocalPort)
 	}
 
 	// Wait for interrupt signal or timeout
@@ -238,26 +219,22 @@ func runSNITunnel(cmd *cobra.Command, args []string) {
 	}
 }
 
-// runWithProfileSNI executes SNI tunnel using configuration profile
-func runWithProfileSNI(expectedMode string) {
+// runWithConfigSNI executes SNI tunnel using configuration file
+func runWithConfigSNI() {
 	configMgr := GetConfigManager()
 	if configMgr == nil {
 		log.Fatal("Error: Configuration manager not initialized")
 	}
 
-	profileConfig, err := configMgr.GetProfile(profile)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
+	config := configMgr.GetConfig()
+	if config == nil {
+		log.Fatal("Error: No configuration loaded")
 	}
 
 	// Validate mode matches
-	if profileConfig.Mode != expectedMode {
-		log.Fatalf("Error: Profile '%s' is configured for mode '%s', but '%s' mode was requested",
-			profile, profileConfig.Mode, expectedMode)
+	if config.Mode != "sni" {
+		log.Fatalf("Error: Configuration is set for mode '%s', but sni mode was requested", config.Mode)
 	}
-
-	// Convert profile to legacy config
-	cfg := configMgr.ConvertProfileToLegacyConfig(profileConfig)
 
 	// Override with CLI proxy type if specified
 	globalProxyType := GetProxyType()
@@ -265,31 +242,30 @@ func runWithProfileSNI(expectedMode string) {
 		log.Fatal("Error: --proxy-type must be either 'socks5' or 'http'")
 	}
 
-	fmt.Printf("[*] Using profile: %s\n", profileConfig.Name)
-	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", cfg.Mode, globalProxyType)
+	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", config.Mode, globalProxyType)
 
-	// Execute the tunnel with the profile configuration
-	runSNITunnelWithConfig(cfg, globalProxyType)
+	// Execute the tunnel with the configuration
+	runSNITunnelWithConfig(config, globalProxyType)
 }
 
 // runSNITunnelWithConfig executes the SNI tunnel with the given configuration
-func runSNITunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
-	fmt.Printf("[*] Front Domain: %s\n", cfg.FrontDomain)
-	fmt.Printf("[*] Proxy: %s:%s\n", cfg.ProxyHost, cfg.ProxyPort)
-	fmt.Printf("[*] Target: %s:%s\n", cfg.TargetHost, cfg.TargetPort)
-	fmt.Printf("[*] SSH User: %s\n", cfg.SSHUsername)
-	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, cfg.LocalSOCKSPort)
+func runSNITunnelWithConfig(config *tunnel.Config, globalProxyType string) {
+	fmt.Printf("[*] Front Domain: %s\n", config.FrontDomain)
+	fmt.Printf("[*] Proxy: %s:%s\n", config.ProxyHost, config.ProxyPort)
+	fmt.Printf("[*] Target: %s:%s\n", config.TargetHost, config.TargetPort)
+	fmt.Printf("[*] SSH User: %s\n", config.SSH.Username)
+	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
 
 	if verbose {
-		printSNIConfig(cfg)
+		printSNIConfig(config)
 	}
 
 	// Establish SNI fronted tunnel
 	fmt.Printf("[*] Establishing TLS connection to %s:%s with SNI %s...\n",
-		cfg.ProxyHost, cfg.ProxyPort, cfg.FrontDomain)
+		config.ProxyHost, config.ProxyPort, config.FrontDomain)
 
 	// 1. Make raw TCP connection to proxy
-	address := fmt.Sprintf("%s:%s", cfg.ProxyHost, cfg.ProxyPort)
+	address := fmt.Sprintf("%s:%s", config.ProxyHost, config.ProxyPort)
 	rawConn, err := net.Dial("tcp", address)
 	if err != nil {
 		log.Fatalf("Failed to connect to proxy: %v", err)
@@ -297,7 +273,7 @@ func runSNITunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 
 	// 2. Establish TLS with SNI set to front domain
 	tlsConfig := &tls.Config{
-		ServerName: cfg.FrontDomain, // This is the key for SNI fronting
+		ServerName: config.FrontDomain, // This is the key for SNI fronting
 	}
 
 	tlsConn := tls.Client(rawConn, tlsConfig)
@@ -309,9 +285,9 @@ func runSNITunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 	// 3. Use the TLS connection to establish WS tunnel to TARGET_HOST:TARGET_PORT
 	conn, err := tunnel.EstablishWSTunnel(
 		"", "", // proxy host/port not needed, we already have the connection
-		cfg.TargetHost,
-		cfg.TargetPort,
-		cfg.PayloadTemplate,
+		config.TargetHost,
+		config.TargetPort,
+		config.Payload,
 		"",      // no front domain spoofing for SNI fronted (using TLS SNI instead)
 		true,    // use_tls
 		tlsConn, // existing TLS connection
@@ -322,7 +298,7 @@ func runSNITunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 	defer conn.Close()
 
 	fmt.Printf("[*] Connected through SNI fronting, tunneling to target %s:%s\n",
-		cfg.TargetHost, cfg.TargetPort)
+		config.TargetHost, config.TargetPort)
 
 	fmt.Printf("[*] Starting SSH connection and %s proxy...\n", globalProxyType)
 
@@ -340,18 +316,18 @@ func runSNITunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 		if globalProxyType == "http" {
 			sshConn, err = tunnel.ConnectViaWSAndStartHTTP(
 				conn,
-				cfg.SSHUsername,
-				cfg.SSHPassword,
-				cfg.SSHPort,
-				cfg.LocalSOCKSPort,
+				config.SSH.Username,
+				config.SSH.Password,
+				config.SSH.Port,
+				config.LocalPort,
 			)
 		} else {
 			sshConn, err = tunnel.ConnectViaWSAndStartSOCKS(
 				conn,
-				cfg.SSHUsername,
-				cfg.SSHPassword,
-				cfg.SSHPort,
-				cfg.LocalSOCKSPort,
+				config.SSH.Username,
+				config.SSH.Password,
+				config.SSH.Port,
+				config.LocalPort,
 			)
 		}
 		sshResultChan <- sshResult{conn: sshConn, err: err}
@@ -364,7 +340,7 @@ func runSNITunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 			log.Fatalf("Error starting SSH connection: %v", result.err)
 		}
 		sshConn = result.conn
-		fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, cfg.LocalSOCKSPort)
+		fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
 
 	case <-time.After(30 * time.Second):
 		fmt.Println("[!] SSH connection timed out after 30 seconds")
@@ -385,17 +361,17 @@ func runSNITunnelWithConfig(cfg *tunnel.Config, globalProxyType string) {
 }
 
 // printSNIConfig prints the SNI configuration for debugging
-func printSNIConfig(cfg *tunnel.Config) {
+func printSNIConfig(config *tunnel.Config) {
 	fmt.Println("SNI Fronting Configuration:")
-	fmt.Printf("  Front Domain: %s (used for SNI)\n", cfg.FrontDomain)
-	fmt.Printf("  Proxy Host: %s\n", cfg.ProxyHost)
-	fmt.Printf("  Proxy Port: %s\n", cfg.ProxyPort)
-	fmt.Printf("  Target Host: %s\n", cfg.TargetHost)
-	fmt.Printf("  Target Port: %s\n", cfg.TargetPort)
-	fmt.Printf("  Local SOCKS Port: %d\n", cfg.LocalSOCKSPort)
-	fmt.Printf("  SSH Username: %s\n", cfg.SSHUsername)
-	fmt.Printf("  SSH Port: %s\n", cfg.SSHPort)
-	fmt.Printf("  Payload Template: %s\n", cfg.PayloadTemplate)
+	fmt.Printf("  Front Domain: %s (used for SNI)\n", config.FrontDomain)
+	fmt.Printf("  Proxy Host: %s\n", config.ProxyHost)
+	fmt.Printf("  Proxy Port: %s\n", config.ProxyPort)
+	fmt.Printf("  Target Host: %s\n", config.TargetHost)
+	fmt.Printf("  Target Port: %s\n", config.TargetPort)
+	fmt.Printf("  Local SOCKS Port: %d\n", config.LocalPort)
+	fmt.Printf("  SSH Username: %s\n", config.SSH.Username)
+	fmt.Printf("  SSH Port: %s\n", config.SSH.Port)
+	fmt.Printf("  Payload Template: %s\n", config.Payload)
 	fmt.Println()
 }
 
@@ -421,5 +397,4 @@ func init() {
 	sniCmd.Flags().IntVarP(&sniFlags.localPort, "local-port", "l", 1080, "local SOCKS proxy port")
 	sniCmd.Flags().IntVarP(&sniFlags.timeout, "timeout", "t", 0, "connection timeout in seconds (0 = no timeout)")
 
-	// Note: Required flags are now validated conditionally in the run function
 }
