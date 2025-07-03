@@ -34,6 +34,10 @@ var validateCmd = &cobra.Command{
 	Run:   validateConfig,
 }
 
+var validateFlags struct {
+	configPath string
+}
+
 var generateFlags struct {
 	output string
 	format string
@@ -48,6 +52,9 @@ func init() {
 	generateCmd.Flags().StringVarP(&generateFlags.output, "output", "o", "tunn-config.json", "output file path")
 	generateCmd.Flags().StringVarP(&generateFlags.format, "format", "f", "json", "output format: json or yaml")
 	generateCmd.Flags().StringVarP(&generateFlags.mode, "mode", "m", "proxy", "tunnel mode: proxy, sni, or direct")
+
+	validateCmd.Flags().StringVarP(&validateFlags.configPath, "config", "c", "", "path to configuration file to validate (required)")
+	validateCmd.MarkFlagRequired("config")
 }
 
 func generateConfig(cmd *cobra.Command, args []string) {
@@ -141,12 +148,13 @@ func generateConfig(cmd *cobra.Command, args []string) {
 }
 
 func validateConfig(cmd *cobra.Command, args []string) {
-	if configFile == "" {
+	configPath := validateFlags.configPath
+	if configPath == "" {
 		fmt.Println("❌ No config file specified. Use --config flag.")
 		os.Exit(1)
 	}
 
-	configMgr := tunnel.NewConfigManager(configFile)
+	configMgr := tunnel.NewConfigManager(configPath)
 	if err := configMgr.LoadConfig(); err != nil {
 		fmt.Printf("❌ Configuration validation failed: %v\n", err)
 		os.Exit(1)
@@ -154,7 +162,7 @@ func validateConfig(cmd *cobra.Command, args []string) {
 
 	config := configMgr.GetConfig()
 
-	fmt.Printf("✓ Configuration file is valid: %s\n", configFile)
+	fmt.Printf("✓ Configuration file is valid: %s\n", configPath)
 	fmt.Printf("📊 Configuration Summary:\n")
 	fmt.Printf("   - Mode: %s\n", config.Mode)
 	fmt.Printf("   - Target: %s:%s\n", config.TargetHost, config.TargetPort)

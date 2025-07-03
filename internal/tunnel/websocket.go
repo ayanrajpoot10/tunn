@@ -108,7 +108,7 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payloadTemp
 		return nil, fmt.Errorf("failed to read first response: %v", err)
 	}
 
-	fmt.Printf(">> First response:\n%s\n", string(firstResponse))
+	fmt.Printf(">> Response:\n%s\n", string(firstResponse))
 
 	// 5. Check for WebSocket upgrade (101 response)
 	responseStr := string(firstResponse)

@@ -65,323 +65,193 @@ make build-all
 
 ## Usage
 
-Tunn supports multiple tunneling strategies, and all modes support both SOCKS5 and HTTP local proxy types via the global `--proxy-type` flag:
+Tunn supports multiple tunneling strategies and requires configuration via JSON/YAML files. All modes support both SOCKS5 and HTTP local proxy types configured in the config file.
 
-**Global Proxy Type Control:**
-- `--proxy-type socks5` (default): Universal compatibility, works with any TCP-based protocol
-- `--proxy-type http`: Optimized for web traffic, works with HTTP/HTTPS applications
+### Configuration-Only Approach
 
-### 1. Proxy Mode
+Tunn now uses a **configuration-first approach** for better maintainability, version control, and sharing of tunnel configurations.
 
-Routes traffic through an HTTP proxy server first, then establishes a WebSocket tunnel to the target host.
-
+**Basic Usage:**
 ```bash
-# Basic proxy mode with SOCKS5 local proxy (default)
-tunn proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
+# Run with a configuration file
+tunn --config myconfig.json
 
-# Proxy mode with HTTP local proxy
-tunn --proxy-type http proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
+# Generate sample configurations
+tunn config generate --mode proxy --output proxy-config.json
+tunn config generate --mode sni --output sni-config.yaml --format yaml
+tunn config generate --mode direct --output direct-config.json
 
-# With custom proxy port and front domain
-tunn --proxy-type socks5 proxy \
-  --proxy-host proxy.example.com \
-  --proxy-port 8080 \
-  --target-host ssh-server.com \
-  --front-domain allowed-domain.com \
-  --ssh-username user \
-  --ssh-password pass
-```
-
-**Required flags for proxy mode:**
-- `--proxy-host`: Proxy server to connect to first
-- `--target-host`: Target SSH server to reach through proxy
-- `--ssh-username`: SSH username for target server
-- `--ssh-password`: SSH password for target server
-
-### 2. SNI Fronting Mode
-
-Uses SNI (Server Name Indication) fronting to establish connections through a proxy with forged SNI headers.
-
-```bash
-# Basic SNI fronting with SOCKS5 proxy (default)
-tunn sni --front-domain google.com --proxy-host proxy.example.com --ssh-username user --ssh-password pass
-
-# SNI fronting with HTTP proxy
-tunn --proxy-type http sni \
-  --front-domain cloudflare.com \
-  --proxy-host proxy.example.com \
-  --proxy-port 443 \
-  --target-host ssh-server.com \
-  --ssh-username user \
-  --ssh-password pass
-```
-
-**Required flags for SNI mode:**
-- `--front-domain`: Domain for SNI fronting
-- `--proxy-host`: Proxy server for the connection
-- `--ssh-username`: SSH username
-- `--ssh-password`: SSH password
-
-### 3. Direct Mode
-
-Establishes a direct connection to the target host with optional Host header spoofing.
-
-```bash
-# Basic direct connection with SOCKS5 proxy (default)
-tunn direct --target-host ssh-server.com --ssh-username user --ssh-password pass
-
-# Direct connection with HTTP proxy and front domain spoofing
-tunn --proxy-type http direct \
-  --front-domain google.com \
-  --target-host ssh-server.com \
-  --target-port 443 \
-  --ssh-username user \
-  --ssh-password pass
-```
-
-**Required flags for direct mode:**
-- `--target-host`: Target SSH server
-- `--ssh-username`: SSH username
-- `--ssh-password`: SSH password
-
-## Common Options
-
-All modes support these additional options:
-
-- `--proxy-type`: Local proxy type - `socks5` (default) or `http` (global flag)
-- `--local-port` / `-l`: Local proxy port (default: 1080 for SOCKS5, 8080 for HTTP)
-- `--ssh-port`: SSH port on target server (default: 22)
-- `--timeout` / `-t`: Connection timeout in seconds (0 = no timeout)
-- `--payload`: Custom HTTP payload template
-- `--verbose` / `-v`: Enable verbose output
-
-## Configuration
-
-Tunn supports two approaches for configuration and usage:
-
-### Quick Start with Configuration Files
-
-**The simplified way (recommended)**: Use a configuration file with profiles - the mode is automatically determined from the profile:
-
-```bash
-# Generate a sample configuration file
-tunn config generate --output myconfig.json
-
-# Edit the file to match your setup, then run:
-tunn --config myconfig.json --profile default
-
-# List available profiles
-tunn config list --config myconfig.json
-
-# Validate configuration
+# Validate configurations
 tunn config validate --config myconfig.json
 ```
 
-**Traditional method**: Use command-line flags with explicit mode specification:
+### Configuration File Structure
 
-```bash
-# Still supported for direct CLI usage
-tunn proxy --proxy-host proxy.example.com --target-host target.example.com --ssh-username user --ssh-password pass
-```
+All tunnel configurations are defined in JSON or YAML files:
 
-### Configuration Files (Xray-like)
-
-Tunn supports JSON and YAML configuration files for managing complex tunnel configurations with multiple profiles, routing rules, and environment variable substitution.
-
-#### Configuration Structure
-
+**Example config.json:**
 ```json
 {
-  "log": {
-    "level": "info",
-    "access": "/var/log/tunn/access.log",
-    "error": "/var/log/tunn/error.log"
+  "mode": "proxy",
+  "targetHost": "target.example.com",
+  "targetPort": "22",
+  "proxyHost": "proxy.example.com", 
+  "proxyPort": "80",
+  "frontDomain": "google.com",
+  "ssh": {
+    "username": "user",
+    "password": "password",
+    "port": "22"
   },
-  "inbounds": [...],
-  "outbounds": [...],
-  "routing": {...},
-  "dns": {...},
-  "profiles": [...]
+  "localPort": 1080,
+  "proxyType": "socks5",
+  "timeout": 30
 }
 ```
 
-#### Profiles Section
+**Example config.yaml:**
+```yaml
+mode: direct
+targetHost: ssh-server.com
+targetPort: "22"
+frontDomain: google.com
+ssh:
+  username: user
+  password: password
+  port: "22"
+localPort: 1080
+proxyType: http
+timeout: 30
+```
 
-The `profiles` section is the main configuration area for tunnel definitions:
+### Tunnel Modes
 
+#### 1. Proxy Mode
+Routes traffic through an HTTP proxy server first, then establishes a WebSocket tunnel to the target host.
+
+**Required configuration:**
 ```json
 {
-  "profiles": [
-    {
-      "name": "default",
-      "mode": "proxy",
-      "proxyHost": "proxy.example.com",
-      "proxyPort": "80",
-      "targetHost": "target.example.com",
-      "targetPort": "22",
-      "frontDomain": "google.com",
-      "ssh": {
-        "username": "user",
-        "password": "password",
-        "port": "22"
-      },
-      "localPort": 1080,
-      "proxyType": "socks5",
-      "payload": "GET / HTTP/1.1\\r\\nHost: $FRONT_DOMAIN\\r\\nUpgrade: websocket\\r\\n\\r\\n",
-      "timeout": 30
-    }
-  ]
+  "mode": "proxy",
+  "proxyHost": "proxy.example.com",
+  "proxyPort": "80", 
+  "targetHost": "ssh-server.com",
+  "targetPort": "22",
+  "ssh": {
+    "username": "user",
+    "password": "password"
+  }
 }
 ```
 
-#### Configuration Management Commands
+#### 2. SNI Fronting Mode
+
+Uses SNI (Server Name Indication) fronting to establish connections through a proxy with forged SNI headers.
+
+**Required configuration:**
+```json
+{
+  "mode": "sni",
+  "frontDomain": "cloudflare.com",
+  "proxyHost": "proxy.example.com",
+  "proxyPort": "443",
+  "targetHost": "ssh-server.com", 
+  "targetPort": "22",
+  "ssh": {
+    "username": "user",
+    "password": "password"
+  }
+}
+```
+
+#### 3. Direct Mode
+
+Establishes a direct connection to the target host with optional Host header spoofing.
+
+**Required configuration:**
+```json
+{
+  "mode": "direct",
+  "targetHost": "ssh-server.com",
+  "targetPort": "22",
+  "frontDomain": "google.com",
+  "ssh": {
+    "username": "user", 
+    "password": "password"
+  }
+}
+```
+
+### Configuration Options
+
+All configuration files support these options:
+
+**Required fields:**
+- `mode`: Tunnel strategy - `proxy`, `sni`, or `direct`
+- `targetHost`: Target SSH server hostname
+- `ssh.username`: SSH username
+- `ssh.password`: SSH password
+
+**Optional fields:**
+- `targetPort`: Target server port (default: "22")  
+- `proxyHost`: Proxy server hostname (required for proxy/sni modes)
+- `proxyPort`: Proxy server port (default: "80" for proxy, "443" for sni)
+- `frontDomain`: Front domain for Host header spoofing
+- `ssh.port`: SSH port on target server (default: "22")
+- `localPort`: Local proxy port (default: 1080)
+- `proxyType`: Local proxy type - `socks5` or `http` (default: "socks5")
+- `payload`: Custom HTTP payload template
+- `timeout`: Connection timeout in seconds (default: 30)
+
+## Configuration Management
+
+### Quick Configuration Setup
 
 ```bash
-# Generate sample configuration
-tunn config generate --output tunn-config.json --format json
-tunn config generate --output tunn-config.yaml --format yaml
+# Generate sample configurations for different modes
+tunn config generate --mode proxy --output proxy-config.json
+tunn config generate --mode sni --output sni-config.yaml --format yaml  
+tunn config generate --mode direct --output direct-config.json
 
-# Validate configuration
-tunn config validate --config tunn-config.json
+# Validate your configuration
+tunn config validate --config myconfig.json
 
-# List available profiles
-tunn config list --config tunn-config.json
-
-# Use configuration with profiles
-tunn --config tunn-config.json --profile default proxy
-tunn --config tunn-config.json --profile sni-mode sni
-
-# Override configuration with CLI flags
-tunn --config tunn-config.json --profile default --proxy-type http proxy
+# Run with your configuration
+tunn --config myconfig.json
 ```
 
-#### Environment Variables in Configuration
+### Environment Variables
 
-Configuration files support environment variable substitution using the `$VARIABLE` syntax:
+Configuration files support environment variable substitution using `$VARIABLE` syntax:
 
 ```json
 {
-  "profiles": [
-    {
-      "name": "production",
-      "targetHost": "$TARGET_HOST",
-      "ssh": {
-        "username": "$SSH_USERNAME",
-        "password": "$SSH_PASSWORD"
-      }
-    }
-  ]
+  "mode": "proxy",
+  "targetHost": "$TARGET_HOST",
+  "ssh": {
+    "username": "$SSH_USERNAME",
+    "password": "$SSH_PASSWORD"
+  }
 }
 ```
 
-Set environment variables before running:
-
+Set variables before running:
 ```bash
 export TARGET_HOST="prod.example.com"
-export SSH_USERNAME="admin"
+export SSH_USERNAME="admin"  
 export SSH_PASSWORD="secret"
-
-tunn --config config.json --profile production proxy
+tunn --config config.json
 ```
 
-#### Advanced Configuration Features
+## SOCKS5 vs HTTP Proxy Configuration
 
-**Routing Rules:**
-
-```json
-{
-  "routing": {
-    "domainStrategy": "IPIfNonMatch",
-    "rules": [
-      {
-        "type": "field",
-        "domain": ["geosite:cn"],
-        "outboundTag": "freedom"
-      },
-      {
-        "type": "field",
-        "ip": ["geoip:private"],
-        "outboundTag": "freedom"
-      }
-    ]
-  }
-}
-```
-
-**Inbound/Outbound Configuration:**
-
-```json
-{
-  "inbounds": [
-    {
-      "tag": "socks-in",
-      "port": 1080,
-      "listen": "127.0.0.1",
-      "protocol": "socks"
-    }
-  ],
-  "outbounds": [
-    {
-      "tag": "tunnel-out", 
-      "protocol": "tunnel",
-      "streamSettings": {
-        "network": "ws",
-        "security": "tls"
-      }
-    }
-  ]
-}
-```
-
-**DNS Configuration:**
-
-```json
-{
-  "dns": {
-    "hosts": {
-      "example.com": "127.0.0.1"
-    },
-    "servers": [
-      "8.8.8.8",
-      "1.1.1.1"
-    ]
-  }
-}
-```
-
-### CLI Configuration (Traditional)
-
-#### Default Payload Template
-
-```
-GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]
-```
-
-Placeholders:
-- `[host]`: Replaced with target host or front domain
-- `[crlf]`: Replaced with `\r\n`
-
-#### Custom Payloads
-
-You can specify custom HTTP payloads for different environments:
-
-```bash
-tunn proxy \
-  --proxy-host proxy.example.com \
-  --target-host ssh-server.com \
-  --payload "CONNECT [host] HTTP/1.1[crlf]Host: [host][crlf][crlf]" \
-  --ssh-username user \
-  --ssh-password pass
-```
-
-## SOCKS5 vs HTTP Proxy Comparison
-
-Tunn now supports both SOCKS5 and HTTP proxy types for your local proxy server. Here's when to use each:
+Tunn supports both SOCKS5 and HTTP proxy types configured via the `proxyType` field in your configuration file:
 
 ### SOCKS5 Proxy (Default)
 
 **Best for:** Universal application compatibility
-**Protocols:** Any TCP-based protocol (SSH, HTTP, HTTPS, FTP, SMTP, etc.)
+**Configuration:** `"proxyType": "socks5"`
+**Default Port:** 1080
 
 **Advantages:**
 - ✅ **Protocol Agnostic**: Works with any TCP application
@@ -390,27 +260,23 @@ Tunn now supports both SOCKS5 and HTTP proxy types for your local proxy server. 
 - ✅ **Port Flexibility**: Can connect to any port
 - ✅ **Transparent**: Preserves original destination information
 
-**Use cases:**
-- SSH tunneling through proxies
-- Database connections
-- File transfers (FTP, SFTP)
-- Email clients (SMTP, IMAP)
-- Any non-web application
-
-**Example usage:**
-```bash
-# SOCKS5 proxy (default)
-tunn proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
-
-# Configure applications
-curl --socks5 127.0.0.1:1080 https://httpbin.org/ip
-ssh -o ProxyCommand="nc -X 5 -x 127.0.0.1:1080 %h %p" user@remote-server
+**Configuration example:**
+```json
+{
+  "mode": "proxy",
+  "proxyType": "socks5",
+  "localPort": 1080,
+  "targetHost": "ssh-server.com",
+  "proxyHost": "proxy.example.com",
+  "ssh": {"username": "user", "password": "pass"}
+}
 ```
 
 ### HTTP Proxy
 
-**Best for:** Web browsing and HTTP-based applications
-**Protocols:** HTTP and HTTPS
+**Best for:** Web browsing and HTTP-based applications  
+**Configuration:** `"proxyType": "http"`
+**Default Port:** 8080
 
 **Advantages:**
 - ✅ **Web Optimized**: Excellent performance for web traffic
@@ -418,25 +284,15 @@ ssh -o ProxyCommand="nc -X 5 -x 127.0.0.1:1080 %h %p" user@remote-server
 - ✅ **Header Processing**: Can modify HTTP headers
 - ✅ **CONNECT Support**: Full HTTPS tunneling support
 
-**Limitations:**
-- ❌ **HTTP/HTTPS Only**: Cannot handle other protocols directly
-- ❌ **Limited Scope**: Not suitable for non-web applications
-
-**Use cases:**
-- Web browsing through corporate proxies
-- HTTP API access
-- Web scraping
-- Browser-based applications
-
-**Example usage:**
-```bash
-# HTTP proxy mode
-tunn --proxy-type http proxy --proxy-host proxy.example.com --target-host ssh-server.com --ssh-username user --ssh-password pass
-
-# Configure applications
-curl --proxy 127.0.0.1:8080 https://httpbin.org/ip
-export http_proxy=http://127.0.0.1:8080
-export https_proxy=http://127.0.0.1:8080
+**Configuration example:**
+```json
+{
+  "mode": "direct", 
+  "proxyType": "http",
+  "localPort": 8080,
+  "targetHost": "ssh-server.com",
+  "ssh": {"username": "user", "password": "pass"}
+}
 ```
 
 ### Choosing the Right Proxy Type
@@ -453,59 +309,82 @@ export https_proxy=http://127.0.0.1:8080
 
 ### Example 1: Corporate Proxy Bypass
 
-```bash
-# Connect through corporate proxy to external SSH server
-tunn proxy \
-  --proxy-host corporate-proxy.company.com \
-  --proxy-port 8080 \
-  --target-host remote-server.com \
-  --front-domain microsoft.com \
-  --ssh-username myuser \
-  --ssh-password mypassword \
-  --local-port 1080
+Create a configuration file `corporate-proxy.json`:
+```json
+{
+  "mode": "proxy",
+  "proxyHost": "corporate-proxy.company.com",
+  "proxyPort": "8080", 
+  "targetHost": "remote-server.com",
+  "frontDomain": "microsoft.com",
+  "ssh": {
+    "username": "myuser",
+    "password": "mypassword"
+  },
+  "localPort": 1080,
+  "proxyType": "socks5"
+}
 ```
+
+Run: `tunn --config corporate-proxy.json`
 
 ### Example 2: HTTP Proxy Mode for Web Traffic
 
-```bash
-# Use HTTP proxy mode for optimized web browsing
-tunn --proxy-type http proxy \
-  --proxy-host corporate-proxy.company.com \
-  --proxy-port 8080 \
-  --target-host ssh-server.com \
-  --ssh-username user \
-  --ssh-password pass
-
-# The local HTTP proxy will be available on 127.0.0.1:8080
-# Configure your browser to use 127.0.0.1:8080 as HTTP proxy
-# Or set environment variables:
-# export http_proxy=http://127.0.0.1:8080
-# export https_proxy=http://127.0.0.1:8080
+Create `web-proxy.json`:
+```json
+{
+  "mode": "proxy",
+  "proxyHost": "corporate-proxy.company.com", 
+  "proxyPort": "8080",
+  "targetHost": "ssh-server.com",
+  "ssh": {
+    "username": "user",
+    "password": "pass"
+  },
+  "localPort": 8080,
+  "proxyType": "http"
+}
 ```
+
+Run: `tunn --config web-proxy.json`
+
+Configure your browser to use HTTP proxy 127.0.0.1:8080
 
 ### Example 3: SNI Fronting for CDN Bypass
 
-```bash
-# Use SNI fronting to bypass CDN restrictions
-tunn sni \
-  --front-domain cloudflare.com \
-  --proxy-host edge-server.com \
-  --target-host hidden-server.com \
-  --ssh-username user \
-  --ssh-password pass
+Create `sni-fronting.yaml`:
+```yaml
+mode: sni
+frontDomain: cloudflare.com
+proxyHost: edge-server.com
+targetHost: hidden-server.com
+ssh:
+  username: user
+  password: pass
+localPort: 1080
+proxyType: socks5
 ```
+
+Run: `tunn --config sni-fronting.yaml`
 
 ### Example 4: Direct Connection with Domain Spoofing
 
-```bash
-# Direct connection with Host header spoofing
-tunn direct \
-  --target-host my-server.com \
-  --front-domain google.com \
-  --ssh-username admin \
-  --ssh-password secret123 \
-  --timeout 60
+Create `direct-tunnel.json`:
+```json
+{
+  "mode": "direct",
+  "targetHost": "my-server.com",
+  "frontDomain": "google.com",
+  "ssh": {
+    "username": "admin", 
+    "password": "secret123"
+  },
+  "timeout": 60,
+  "proxyType": "socks5"
+}
 ```
+
+Run: `tunn --config direct-tunnel.json`
 
 ## How It Works
 
@@ -549,8 +428,15 @@ chrome --proxy-server="socks5://127.0.0.1:1080"
 # curl with SOCKS proxy
 curl --socks5 127.0.0.1:1080 https://example.com
 
+# curl with HTTP proxy  
+curl --proxy 127.0.0.1:8080 https://example.com
+
 # ssh through the tunnel
 ssh -o ProxyCommand="nc -X 5 -x 127.0.0.1:1080 %h %p" user@target-server.com
+
+# Set environment variables for HTTP proxy
+export http_proxy=http://127.0.0.1:8080
+export https_proxy=http://127.0.0.1:8080
 ```
 
 ## Development
@@ -563,10 +449,8 @@ tunn/
 ├── go.mod               # Go module dependencies
 ├── Makefile            # Build automation
 ├── cmd/                # CLI commands
-│   ├── root.go         # Root command and global flags
-│   ├── proxy.go        # Proxy mode implementation
-│   ├── sni.go          # SNI fronting mode implementation
-│   └── direct.go       # Direct mode implementation
+│   ├── root.go         # Root command and config file handling
+│   └── config.go       # Configuration management commands
 └── internal/
     └── tunnel/         # Core tunneling logic
         ├── config.go   # Configuration structures
@@ -626,55 +510,68 @@ The release process automatically:
 
 ## Troubleshooting
 
+## Troubleshooting
+
 ### Configuration File Issues
 
-**Invalid Configuration**: Use `tunn config validate` to check for syntax errors
+**Invalid Configuration**: Use `tunn config validate --config myconfig.json` to check for syntax errors
 
-**Missing Required Fields**: Ensure all required fields are present in profiles
+**Missing Required Fields**: Ensure all required fields are present:
+- `mode`: Must be "proxy", "sni", or "direct"
+- `targetHost`: Target SSH server hostname
+- `ssh.username` and `ssh.password`: SSH credentials
 
 **Environment Variables**: Make sure environment variables are set before running
 
 **File Permissions**: Ensure the configuration file is readable
 
-**Debug Mode**: Use verbose mode to see configuration loading details:
-
-```bash
-tunn --config config.json --profile myprofile --verbose proxy
-```
-
-This will show:
-- Configuration file loading status
-- Profile selection
-- Environment variable substitution
-- Validation results
+**Debug Mode**: Check configuration loading by examining the startup output
 
 ### Common Issues
 
+**Configuration File Not Found**:
+- Verify the path to your config file
+- Use absolute paths if relative paths don't work
+- Check file permissions
+
 **Connection Timeout**:
-- Increase timeout with `--timeout` flag
+- Increase timeout in config: `"timeout": 60`
 - Check network connectivity to proxy/target hosts
 
 **SSH Authentication Failed**:
-- Verify SSH credentials
+- Verify SSH credentials in config file
 - Check if SSH service is running on target port
 - Ensure target host allows password authentication
 
 **WebSocket Upgrade Failed**:
-- Try different payload templates
+- Try different payload templates in config
 - Check if proxy supports WebSocket upgrades
 - Verify front domain is not blocked
 
-**SOCKS Proxy Not Working**:
-- Ensure Tunn is running and showing "SOCKS proxy up" message
+**SOCKS/HTTP Proxy Not Working**:
+- Ensure Tunn is running and showing "proxy up" message
 - Check local firewall settings
-- Verify application SOCKS configuration
+- Verify application proxy configuration matches your config file settings
 
-### Debug Mode
+### Config File Examples
 
-Enable verbose output for debugging:
+**Minimal proxy config:**
+```json
+{
+  "mode": "proxy",
+  "proxyHost": "proxy.example.com",
+  "targetHost": "ssh-server.com", 
+  "ssh": {"username": "user", "password": "pass"}
+}
+```
 
-```bash
-tunn --verbose proxy --proxy-host example.com --target-host target.com --ssh-username user --ssh-password pass
+**Minimal direct config:**
+```json
+{
+  "mode": "direct",
+  "targetHost": "ssh-server.com",
+  "ssh": {"username": "user", "password": "pass"}
+}
 ```
 
 ## License

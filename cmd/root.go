@@ -16,8 +16,6 @@ import (
 )
 
 var (
-	verbose    bool
-	proxyType  string
 	configFile string
 	configMgr  *tunnel.ConfigManager
 )
@@ -32,38 +30,43 @@ including HTTP payload tunneling, SNI fronting, and direct connections.
 It creates secure SSH tunnels over WebSocket connections and provides a SOCKS proxy
 for routing traffic through the established tunnel.
 
-Available tunnel modes:
+Available tunnel modes (configured via config file):
   proxy         - HTTP proxy tunneling strategy  
   sni           - SNI fronting strategy  
   direct        - Direct connection with front domain spoofing
 
-All modes support both SOCKS5 and HTTP local proxy types via --proxy-type flag.
-
-Configuration can be provided via:
-  1. Command line flags with mode specification: tunn [mode] --target-host example.com --ssh-username user
-  2. JSON/YAML configuration file with profile: tunn --config config.json --profile myprofile
-
-When using a configuration file with profiles, the mode is automatically determined from the profile,
-eliminating the need to specify the mode separately.
-
-Examples:
-  # Command line usage with config file
+Configuration must be provided via JSON/YAML configuration file:
   tunn --config config.json
-  
-  # Traditional command line usage
-  tunn proxy --proxy-host proxy.example.com --target-host target.example.com --ssh-username user --ssh-password pass
-  
-Use 'tunn [mode] --help' for mode-specific options and examples.`,
+
+Example configuration file (config.json):
+{
+  "mode": "proxy",
+  "targetHost": "target.example.com",
+  "proxyHost": "proxy.example.com",
+  "ssh": {
+    "username": "user",
+    "password": "pass"
+  }
+}
+
+To generate sample configurations:
+  tunn config generate --mode proxy --output proxy-config.json
+  tunn config generate --mode sni --output sni-config.yaml --format yaml
+  tunn config generate --mode direct --output direct-config.json
+
+To validate a configuration:
+  tunn config validate --config myconfig.json`,
 	Version: "v0.1.1",
 	Run: func(cmd *cobra.Command, args []string) {
-		// If config file is specified, run directly using the config
-		if configFile != "" {
-			runWithConfig(cmd)
-			return
+		// Config file is required
+		if configFile == "" {
+			fmt.Println("Error: Configuration file is required")
+			fmt.Println("\nUsage: tunn --config config.json")
+			fmt.Println("\nTo generate a sample config: tunn config generate")
+			os.Exit(1)
 		}
 
-		// Otherwise, show help
-		cmd.Help()
+		runWithConfig(cmd)
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Load configuration if config file is provided
@@ -73,9 +76,7 @@ Use 'tunn [mode] --help' for mode-specific options and examples.`,
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			if verbose {
-				fmt.Printf("✓ Configuration loaded from: %s\n", configFile)
-			}
+			fmt.Printf("✓ Configuration loaded from: %s\n", configFile)
 		}
 		return nil
 	},
@@ -91,10 +92,8 @@ func Execute() {
 }
 
 func init() {
-	// Global flags
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	rootCmd.PersistentFlags().StringVar(&proxyType, "proxy-type", "socks5", "local proxy type: 'socks5' or 'http'")
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "path to configuration file (JSON/YAML)")
+	// Config file flag (required for main command, but not for config subcommands)
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "path to configuration file (JSON/YAML) - required")
 
 	// Disable built-in commands
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -102,11 +101,6 @@ func init() {
 		Use:    "no-help",
 		Hidden: true,
 	})
-}
-
-// GetProxyType returns the global proxy type setting
-func GetProxyType() string {
-	return proxyType
 }
 
 // GetConfigManager returns the global config manager
@@ -125,33 +119,8 @@ func runWithConfig(cmd *cobra.Command) {
 		log.Fatal("Error: No configuration loaded")
 	}
 
-	// Determine proxy type with proper priority:
-	// 1. User-provided --proxy-type flag (highest priority)
-	// 2. Config's proxyType setting
-	// 3. Default "socks5" (lowest priority)
-	var effectiveProxyType string
-
-	// Check if --proxy-type flag was explicitly set by user
-	proxyTypeFlag := cmd.PersistentFlags().Lookup("proxy-type")
-	if proxyTypeFlag != nil && proxyTypeFlag.Changed {
-		// User explicitly provided --proxy-type flag, use it
-		effectiveProxyType = GetProxyType()
-		if verbose {
-			fmt.Printf("[*] Using --proxy-type flag: %s\n", effectiveProxyType)
-		}
-	} else if config.ProxyType != "" {
-		// No explicit flag, use config's proxyType
-		effectiveProxyType = config.ProxyType
-		if verbose {
-			fmt.Printf("[*] Using config proxyType: %s\n", effectiveProxyType)
-		}
-	} else {
-		// Neither flag nor config specify, use default
-		effectiveProxyType = "socks5"
-		if verbose {
-			fmt.Printf("[*] Using default proxyType: %s\n", effectiveProxyType)
-		}
-	}
+	// Use proxy type from config (defaults to "socks5" if not specified)
+	effectiveProxyType := config.ProxyType
 
 	// Validate proxy type
 	if effectiveProxyType != "socks5" && effectiveProxyType != "http" {
