@@ -39,12 +39,16 @@ The local proxy type can be controlled with the global --proxy-type flag:
   --proxy-type socks5  : Start a SOCKS5 proxy (default, works with all protocols)
   --proxy-type http    : Start an HTTP proxy (works with HTTP/HTTPS traffic)
 
+Configuration Methods:
+  1. Command line flags (this command)
+  2. Configuration file with profile (use: tunn --config config.json --profile myprofile)
+
 Example usage:
   # Basic direct connection with SOCKS5 proxy (default)
   tunn direct --front-domain google.com --target-host target.example.com --ssh-username user --ssh-password pass
   
-  # Direct connection with HTTP proxy
-  tunn --proxy-type http direct --front-domain cloudflare.com --target-host target.example.com --target-port 443 --ssh-username user --ssh-password pass`,
+  # Using configuration profile (no need to specify 'direct' mode)
+  tunn --config config.json --profile direct-profile`,
 	Run: runDirectTunnel,
 }
 

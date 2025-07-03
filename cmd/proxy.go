@@ -44,16 +44,15 @@ The local proxy type can be controlled with the global --proxy-type flag:
   --proxy-type http    : Start an HTTP proxy (works with HTTP/HTTPS traffic)
 
 Configuration Methods:
-  1. Command line flags (traditional)
-  2. Configuration file with profile
-  3. Mixed (config + CLI overrides)
+  1. Command line flags (this command)
+  2. Configuration file with profile (use: tunn --config config.json --profile myprofile)
 
 Example usage:
   # Basic proxy mode with SOCKS5 local proxy (default)
   tunn proxy --proxy-host proxy.example.com --target-host target.example.com --ssh-username user --ssh-password pass
   
-  # Using configuration profile  
-  tunn --config tunn-config.json --profile default proxy`,
+  # Using configuration profile (no need to specify 'proxy' mode)
+  tunn --config tunn-config.json --profile default`,
 	Run: runProxyTunnel,
 }
 

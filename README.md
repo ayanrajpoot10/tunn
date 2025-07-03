@@ -157,7 +157,32 @@ All modes support these additional options:
 
 ## Configuration
 
-Tunn supports two configuration approaches: traditional CLI flags and Xray-like configuration files for advanced users.
+Tunn supports two approaches for configuration and usage:
+
+### Quick Start with Configuration Files
+
+**The simplified way (recommended)**: Use a configuration file with profiles - the mode is automatically determined from the profile:
+
+```bash
+# Generate a sample configuration file
+tunn config generate --output myconfig.json
+
+# Edit the file to match your setup, then run:
+tunn --config myconfig.json --profile default
+
+# List available profiles
+tunn config list --config myconfig.json
+
+# Validate configuration
+tunn config validate --config myconfig.json
+```
+
+**Traditional method**: Use command-line flags with explicit mode specification:
+
+```bash
+# Still supported for direct CLI usage
+tunn proxy --proxy-host proxy.example.com --target-host target.example.com --ssh-username user --ssh-password pass
+```
 
 ### Configuration Files (Xray-like)
 
