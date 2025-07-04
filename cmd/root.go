@@ -296,28 +296,21 @@ func startSSHConnection(conn net.Conn, config *tunnel.Config, globalProxyType st
 			fmt.Printf("[+] Configure your applications to use HTTP proxy 127.0.0.1:%d\n", config.LocalPort)
 		}
 
-	case <-time.After(30 * time.Second):
-		fmt.Println("[!] SSH connection timed out after 30 seconds")
+	case <-time.After(time.Duration(timeout) * time.Second):
+		fmt.Printf("[!] SSH connection timed out after %d seconds\n", timeout)
 		conn.Close()
 		log.Fatal("SSH connection establishment timed out")
 	}
 
 	defer sshConn.Close()
 
-	// Wait for interrupt signal or timeout
+	// Wait for interrupt signal only (no timeout for tunnel duration)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	// Keep running until interrupt or timeout
-	timeoutDuration := time.Duration(timeout) * time.Second
-	if timeout <= 0 {
-		timeoutDuration = time.Hour * 24 * 365 // Effectively forever
-	}
-
+	// Keep running until interrupt signal is received
 	select {
 	case <-sigChan:
 		fmt.Println("\n[*] Shutting down (interrupt signal received).")
-	case <-time.After(timeoutDuration):
-		fmt.Println("\n[*] Shutting down (timeout reached).")
 	}
 }
