@@ -145,13 +145,11 @@ func validateConfig(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	configMgr := tunnel.NewConfigManager(configPath)
-	if err := configMgr.LoadConfig(); err != nil {
+	config, err := tunnel.LoadConfig(configPath)
+	if err != nil {
 		fmt.Printf("Error: Configuration validation failed: %v\n", err)
 		os.Exit(1)
 	}
-
-	config := configMgr.GetConfig()
 
 	fmt.Printf("Success: Configuration file is valid: %s\n", configPath)
 	fmt.Printf("Configuration Summary:\n")

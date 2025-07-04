@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,54 +18,23 @@ import (
 
 var (
 	configFile string
-	configMgr  *tunnel.ConfigManager
+	config     *tunnel.Config
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "tunn",
-	Short: "A powerful tunnel tool for secure connections",
-	Long: `Tunn is a versatile tunneling tool that supports multiple connection strategies
-including HTTP payload tunneling, SNI fronting, and direct connections.
-
-It creates secure SSH tunnels over WebSocket connections and provides a SOCKS proxy
-for routing traffic through the established tunnel.
-
-Available tunnel modes (configured via config file):
-  proxy         - HTTP proxy tunneling strategy  
-  sni           - SNI fronting strategy  
-  direct        - Direct connection with front domain spoofing
-
-Configuration must be provided via JSON configuration file:
-  tunn --config config.json
-
-To generate sample configurations:
-  tunn config generate --mode proxy --output proxy-config.json
-  tunn config generate --mode sni --output sni-config.json
-  tunn config generate --mode direct --output direct-config.json
-
-To validate a configuration:
-  tunn config validate --config myconfig.json`,
+	Use:     "tunn",
+	Short:   "A powerful tunnel tool for secure connections",
+	Long:    "Tunn creates secure SSH tunnels over WebSocket connections with support for proxy, SNI, and direct modes.",
 	Version: "v0.1.1",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Config file is required
-		if configFile == "" {
-			fmt.Println("Error: Configuration file is required")
-			fmt.Println("\nUsage: tunn --config config.json")
-			fmt.Println("\nTo generate a sample config: tunn config generate")
-			os.Exit(1)
-		}
-
-		runWithConfig(cmd)
-	},
+	Run:     runTunnel,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Load configuration if config file is provided
 		if configFile != "" {
-			configMgr = tunnel.NewConfigManager(configFile)
-			if err := configMgr.LoadConfig(); err != nil {
+			var err error
+			config, err = tunnel.LoadConfig(configFile)
+			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
-
 			fmt.Printf("Configuration loaded from: %s\n", configFile)
 		}
 		return nil
@@ -72,245 +42,219 @@ To validate a configuration:
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
 func init() {
-	// Config file flag (required for main command, but not for config subcommands)
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "path to configuration file (JSON) - required")
-
-	// Disable built-in commands
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.SetHelpCommand(&cobra.Command{
-		Use:    "no-help",
-		Hidden: true,
-	})
+	rootCmd.SetHelpCommand(&cobra.Command{Use: "no-help", Hidden: true})
 }
 
-// GetConfigManager returns the global config manager
-func GetConfigManager() *tunnel.ConfigManager {
-	return configMgr
+// GetConfig returns the global config
+func GetConfig() *tunnel.Config {
+	return config
 }
 
-// runWithConfig executes tunnel using configuration file
-func runWithConfig(cmd *cobra.Command) {
-	if configMgr == nil {
-		log.Fatal("Error: Configuration manager not initialized")
+// runTunnel is the main entry point for running the tunnel
+func runTunnel(cmd *cobra.Command, args []string) {
+	if configFile == "" {
+		fmt.Println("Error: Configuration file is required")
+		fmt.Println("\nUsage: tunn --config config.json")
+		fmt.Println("\nTo generate a sample config: tunn config generate")
+		os.Exit(1)
 	}
 
-	config := configMgr.GetConfig()
 	if config == nil {
-		log.Fatal("Error: No configuration loaded")
+		log.Fatal("Error: Configuration not loaded")
 	}
-
-	// Use proxy type from config (defaults to "socks5" if not specified)
-	effectiveProxyType := config.ProxyType
 
 	// Validate proxy type
-	if effectiveProxyType != "socks5" && effectiveProxyType != "http" {
+	if config.ProxyType != "socks5" && config.ProxyType != "http" {
 		log.Fatal("Error: proxy type must be either 'socks5' or 'http'")
 	}
 
 	fmt.Printf("[*] Using mode: %s\n", config.Mode)
-	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", config.Mode, effectiveProxyType)
+	fmt.Printf("[*] Starting tunnel using %s strategy with %s local proxy\n", config.Mode, config.ProxyType)
 
-	// Execute the appropriate tunnel function based on the config mode
-	switch config.Mode {
-	case "proxy":
-		runTunnelWithConfigProxy(config, effectiveProxyType)
-	case "sni":
-		runTunnelWithConfigSNI(config, effectiveProxyType)
-	case "direct":
-		runTunnelWithConfigDirect(config, effectiveProxyType)
-	default:
-		log.Fatalf("Error: Unsupported mode '%s' in config", config.Mode)
-	}
-}
-
-// runTunnelWithConfigProxy executes proxy tunnel with the given configuration
-func runTunnelWithConfigProxy(config *tunnel.Config, globalProxyType string) {
-	fmt.Printf("[*] Proxy: %s:%s\n", config.ProxyHost, config.ProxyPort)
-	fmt.Printf("[*] Target: %s:%s\n", config.TargetHost, config.TargetPort)
-	fmt.Printf("[*] SSH User: %s\n", config.SSH.Username)
-	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
-
-	if config.FrontDomain != "" {
-		fmt.Printf("[*] Front Domain: %s\n", config.FrontDomain)
-	}
-
-	// Establish HTTP proxy tunnel
-	conn, err := tunnel.EstablishWSTunnel(
-		config.ProxyHost,
-		config.ProxyPort,
-		config.TargetHost,
-		config.TargetPort,
-		config.Payload,
-		config.FrontDomain,
-		false,
-		nil,
-	)
+	// Establish connection based on mode
+	conn, err := establishConnection(config)
 	if err != nil {
-		log.Fatalf("Error establishing proxy tunnel to target: %v", err)
+		log.Fatalf("Error establishing connection: %v", err)
 	}
 	defer conn.Close()
 
-	fmt.Printf("[*] Connected to proxy %s:%s, tunneling to target %s:%s\n",
-		config.ProxyHost, config.ProxyPort, config.TargetHost, config.TargetPort)
-
-	fmt.Printf("[*] Starting SSH connection and %s proxy...\n", globalProxyType)
-
-	startSSHConnection(conn, config, globalProxyType, config.Timeout)
+	// Start SSH connection and proxy
+	startSSHConnection(conn, config)
 }
 
-// runTunnelWithConfigSNI executes SNI tunnel with the given configuration
-func runTunnelWithConfigSNI(config *tunnel.Config, globalProxyType string) {
-	fmt.Printf("[*] SNI Front Domain: %s\n", config.FrontDomain)
-	fmt.Printf("[*] Proxy: %s:%s\n", config.ProxyHost, config.ProxyPort)
-	fmt.Printf("[*] Target: %s:%s\n", config.TargetHost, config.TargetPort)
-	fmt.Printf("[*] SSH User: %s\n", config.SSH.Username)
-	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
+// establishConnection creates the appropriate connection based on the mode
+func establishConnection(config *tunnel.Config) (net.Conn, error) {
+	printConnectionInfo(config)
 
-	// Connect to proxy with SNI fronting
+	switch config.Mode {
+	case "proxy":
+		return establishProxyConnection(config)
+	case "sni":
+		return establishSNIConnection(config)
+	case "direct":
+		return establishDirectConnection(config)
+	default:
+		return nil, fmt.Errorf("unsupported mode: %s", config.Mode)
+	}
+}
+
+// establishProxyConnection creates a proxy tunnel connection
+func establishProxyConnection(config *tunnel.Config) (net.Conn, error) {
+	conn, err := tunnel.EstablishWSTunnel(
+		config.ProxyHost, config.ProxyPort,
+		config.TargetHost, config.TargetPort,
+		config.Payload, config.FrontDomain,
+		false, nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("proxy tunnel failed: %w", err)
+	}
+
+	fmt.Printf("[*] Connected to proxy %s:%s, tunneling to target %s:%s\n",
+		config.ProxyHost, config.ProxyPort, config.TargetHost, config.TargetPort)
+	return conn, nil
+}
+
+// establishSNIConnection creates an SNI fronted connection
+func establishSNIConnection(config *tunnel.Config) (net.Conn, error) {
+	// Connect to proxy
 	conn, err := net.Dial("tcp", net.JoinHostPort(config.ProxyHost, config.ProxyPort))
 	if err != nil {
-		log.Fatalf("Error connecting to proxy: %v", err)
+		return nil, fmt.Errorf("proxy connection failed: %w", err)
 	}
 
-	// Setup TLS connection with SNI fronting
-	tlsConfig := &tls.Config{
+	// Setup TLS with SNI fronting
+	tlsConn := tls.Client(conn, &tls.Config{
 		ServerName:         config.FrontDomain,
 		InsecureSkipVerify: true,
-	}
-
-	tlsConn := tls.Client(conn, tlsConfig)
+	})
 	if err := tlsConn.Handshake(); err != nil {
-		log.Fatalf("Error establishing TLS connection: %v", err)
+		conn.Close()
+		return nil, fmt.Errorf("TLS handshake failed: %w", err)
 	}
 
 	fmt.Printf("[*] TLS connection established with SNI: %s\n", config.FrontDomain)
 
-	// Establish WebSocket tunnel through the TLS connection
+	// Establish WebSocket tunnel through TLS connection
 	wsConn, err := tunnel.EstablishWSTunnel(
-		config.TargetHost,
-		config.TargetPort,
-		config.TargetHost,
-		config.TargetPort,
-		config.Payload,
-		config.FrontDomain,
-		true,
-		tlsConn,
+		config.TargetHost, config.TargetPort,
+		config.TargetHost, config.TargetPort,
+		config.Payload, config.FrontDomain,
+		true, tlsConn,
 	)
 	if err != nil {
-		log.Fatalf("Error establishing WebSocket tunnel: %v", err)
+		tlsConn.Close()
+		return nil, fmt.Errorf("WebSocket tunnel failed: %w", err)
 	}
-	defer wsConn.Close()
 
 	fmt.Printf("[*] SNI fronted connection established to target %s:%s\n", config.TargetHost, config.TargetPort)
-
-	startSSHConnection(wsConn, config, globalProxyType, config.Timeout)
+	return wsConn, nil
 }
 
-// runTunnelWithConfigDirect executes direct tunnel with the given configuration
-func runTunnelWithConfigDirect(config *tunnel.Config, globalProxyType string) {
-	fmt.Printf("[*] Target: %s:%s\n", config.TargetHost, config.TargetPort)
-	fmt.Printf("[*] SSH User: %s\n", config.SSH.Username)
-	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
-
-	if config.FrontDomain != "" {
-		fmt.Printf("[*] Front Domain: %s\n", config.FrontDomain)
-	}
-
-	// Establish direct WebSocket connection
+// establishDirectConnection creates a direct connection
+func establishDirectConnection(config *tunnel.Config) (net.Conn, error) {
 	conn, err := tunnel.EstablishWSTunnel(
 		"", "",
-		config.TargetHost,
-		config.TargetPort,
-		config.Payload,
-		config.FrontDomain,
-		false,
-		nil,
+		config.TargetHost, config.TargetPort,
+		config.Payload, config.FrontDomain,
+		false, nil,
 	)
 	if err != nil {
-		log.Fatalf("Error establishing direct tunnel: %v", err)
+		return nil, fmt.Errorf("direct tunnel failed: %w", err)
 	}
-	defer conn.Close()
 
 	fmt.Printf("[*] Direct connection established to target %s:%s\n", config.TargetHost, config.TargetPort)
-
-	startSSHConnection(conn, config, globalProxyType, config.Timeout)
+	return conn, nil
 }
 
-// startSSHConnection is a common function to start SSH connection and handle signals
-func startSSHConnection(conn net.Conn, config *tunnel.Config, globalProxyType string, timeout int) {
-	// Create a channel for the SSH connection result
+// printConnectionInfo prints connection information based on mode
+func printConnectionInfo(config *tunnel.Config) {
+	fmt.Printf("[*] Target: %s:%s\n", config.TargetHost, config.TargetPort)
+	fmt.Printf("[*] SSH User: %s\n", config.SSH.Username)
+	fmt.Printf("[*] Local %s proxy will be available on 127.0.0.1:%d\n", config.ProxyType, config.LocalPort)
+
+	if config.Mode == "proxy" || config.Mode == "sni" {
+		fmt.Printf("[*] Proxy: %s:%s\n", config.ProxyHost, config.ProxyPort)
+	}
+	if config.Mode == "sni" {
+		fmt.Printf("[*] SNI Front Domain: %s\n", config.FrontDomain)
+	}
+	if config.FrontDomain != "" && config.Mode != "sni" {
+		fmt.Printf("[*] Front Domain: %s\n", config.FrontDomain)
+	}
+}
+
+// startSSHConnection establishes SSH connection and starts the proxy
+func startSSHConnection(conn net.Conn, config *tunnel.Config) {
+	fmt.Printf("[*] Starting SSH connection and %s proxy...\n", config.ProxyType)
+
+	// Start SSH connection with timeout
+	sshConn, err := connectSSHWithTimeout(conn, config)
+	if err != nil {
+		log.Fatalf("Error starting SSH connection: %v", err)
+	}
+	defer sshConn.Close()
+
+	// Print success message
+	fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", config.ProxyType, config.LocalPort)
+	fmt.Printf("[+] All traffic through that proxy is forwarded over SSH via WS tunnel.\n")
+	fmt.Printf("[+] Configure your applications to use %s proxy 127.0.0.1:%d\n",
+		strings.ToUpper(config.ProxyType), config.LocalPort)
+
+	// Wait for interrupt signal
+	waitForInterrupt()
+}
+
+// connectSSHWithTimeout establishes SSH connection with timeout
+func connectSSHWithTimeout(conn net.Conn, config *tunnel.Config) (*tunnel.SSHOverWebSocket, error) {
 	type sshResult struct {
 		conn *tunnel.SSHOverWebSocket
 		err  error
 	}
-	sshResultChan := make(chan sshResult, 1)
+	resultChan := make(chan sshResult, 1)
 
-	// Start SSH connection in a goroutine with timeout
+	// Start SSH connection in goroutine
 	go func() {
 		var sshConn *tunnel.SSHOverWebSocket
 		var err error
 
-		if globalProxyType == "http" {
+		if config.ProxyType == "http" {
 			sshConn, err = tunnel.ConnectViaWSAndStartHTTP(
-				conn,
-				config.SSH.Username,
-				config.SSH.Password,
-				config.SSH.Port,
-				config.LocalPort,
+				conn, config.SSH.Username, config.SSH.Password,
+				config.SSH.Port, config.LocalPort,
 			)
 		} else {
 			sshConn, err = tunnel.ConnectViaWSAndStartSOCKS(
-				conn,
-				config.SSH.Username,
-				config.SSH.Password,
-				config.SSH.Port,
-				config.LocalPort,
+				conn, config.SSH.Username, config.SSH.Password,
+				config.SSH.Port, config.LocalPort,
 			)
 		}
-		sshResultChan <- sshResult{conn: sshConn, err: err}
+		resultChan <- sshResult{conn: sshConn, err: err}
 	}()
 
-	// Wait for SSH connection with timeout
-	var sshConn *tunnel.SSHOverWebSocket
+	// Wait for result or timeout
 	select {
-	case result := <-sshResultChan:
-		if result.err != nil {
-			log.Fatalf("Error starting SSH connection: %v", result.err)
-		}
-		sshConn = result.conn
-		fmt.Printf("[+] %s proxy up on 127.0.0.1:%d\n", globalProxyType, config.LocalPort)
-		fmt.Printf("[+] All traffic through that proxy is forwarded over SSH via WS tunnel.\n")
-
-		if globalProxyType == "socks5" {
-			fmt.Printf("[+] Configure your applications to use SOCKS5 proxy 127.0.0.1:%d\n", config.LocalPort)
-		} else {
-			fmt.Printf("[+] Configure your applications to use HTTP proxy 127.0.0.1:%d\n", config.LocalPort)
-		}
-
-	case <-time.After(time.Duration(timeout) * time.Second):
-		fmt.Printf("[!] SSH connection timed out after %d seconds\n", timeout)
+	case result := <-resultChan:
+		return result.conn, result.err
+	case <-time.After(time.Duration(config.Timeout) * time.Second):
 		conn.Close()
-		log.Fatal("SSH connection establishment timed out")
+		return nil, fmt.Errorf("SSH connection timed out after %d seconds", config.Timeout)
 	}
+}
 
-	defer sshConn.Close()
-
-	// Wait for interrupt signal only (no timeout for tunnel duration)
+// waitForInterrupt waits for interrupt signal
+func waitForInterrupt() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// Keep running until interrupt signal is received
-	select {
-	case <-sigChan:
-		fmt.Println("\n[*] Shutting down (interrupt signal received).")
-	}
+	<-sigChan
+	fmt.Println("\n[*] Shutting down (interrupt signal received).")
 }

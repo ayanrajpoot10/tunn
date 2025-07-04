@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
-// Config represents the simplified main configuration structure
+// Config represents the tunnel configuration structure
 type Config struct {
 	// Connection settings
 	Mode        string `json:"mode"`                  // proxy, sni, direct
@@ -37,119 +36,98 @@ type SSHConfig struct {
 	Port     string `json:"port,omitempty"` // SSH port (default: 22)
 }
 
-// ConfigManager handles loading and parsing of configuration files
-type ConfigManager struct {
-	configPath string
-	config     *Config
-}
-
-// NewConfigManager creates a new configuration manager
-func NewConfigManager(configPath string) *ConfigManager {
-	return &ConfigManager{
-		configPath: configPath,
-	}
-}
-
-// LoadConfig loads configuration from file
-func (cm *ConfigManager) LoadConfig() error {
-	if cm.configPath == "" {
-		return fmt.Errorf("no config file specified")
+// LoadConfig loads and validates configuration from file
+func LoadConfig(configPath string) (*Config, error) {
+	if configPath == "" {
+		return nil, fmt.Errorf("no config file specified")
 	}
 
-	data, err := os.ReadFile(cm.configPath)
+	// Check if file exists and is JSON
+	if !strings.HasSuffix(strings.ToLower(configPath), ".json") {
+		return nil, fmt.Errorf("config file must be a JSON file")
+	}
+
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Substitute environment variables
-	content := cm.substituteEnvVars(string(data))
-
-	// Determine file format by extension
-	ext := strings.ToLower(filepath.Ext(cm.configPath))
-
-	cm.config = &Config{}
-
-	switch ext {
-	case ".json":
-		if err := json.Unmarshal([]byte(content), cm.config); err != nil {
-			return fmt.Errorf("failed to parse JSON config: %w", err)
-		}
-	default:
-		return fmt.Errorf("unsupported config file format: %s (supported: .json)", ext)
+	// Substitute environment variables and parse JSON
+	content := os.ExpandEnv(string(data))
+	config := &Config{}
+	if err := json.Unmarshal([]byte(content), config); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON config: %w", err)
 	}
 
-	return cm.validateConfig()
+	// Validate and set defaults
+	if err := config.validate(); err != nil {
+		return nil, err
+	}
+	config.setDefaults()
+
+	return config, nil
 }
 
-// substituteEnvVars replaces environment variable placeholders in config
-func (cm *ConfigManager) substituteEnvVars(content string) string {
-	return os.ExpandEnv(content)
-}
-
-// validateConfig validates the loaded configuration
-func (cm *ConfigManager) validateConfig() error {
-	if cm.config == nil {
-		return fmt.Errorf("no configuration loaded")
-	}
-
+// validate validates the configuration
+func (c *Config) validate() error {
 	// Validate mode
-	if cm.config.Mode != "proxy" && cm.config.Mode != "sni" && cm.config.Mode != "direct" {
-		return fmt.Errorf("invalid mode '%s', must be: proxy, sni, or direct", cm.config.Mode)
+	validModes := []string{"proxy", "sni", "direct"}
+	if !contains(validModes, c.Mode) {
+		return fmt.Errorf("invalid mode '%s', must be one of: %s", c.Mode, strings.Join(validModes, ", "))
 	}
 
-	// Validate target host
-	if cm.config.TargetHost == "" {
+	// Validate required fields
+	if c.TargetHost == "" {
 		return fmt.Errorf("targetHost is required")
 	}
-
-	// Validate SSH settings
-	if cm.config.SSH.Username == "" {
+	if c.SSH.Username == "" {
 		return fmt.Errorf("SSH username is required")
 	}
-	if cm.config.SSH.Password == "" {
+	if c.SSH.Password == "" {
 		return fmt.Errorf("SSH password is required")
 	}
 
 	// Mode-specific validation
-	switch cm.config.Mode {
-	case "proxy", "sni":
-		if cm.config.ProxyHost == "" {
-			return fmt.Errorf("proxyHost is required for %s mode", cm.config.Mode)
+	if c.Mode == "proxy" || c.Mode == "sni" {
+		if c.ProxyHost == "" {
+			return fmt.Errorf("proxyHost is required for %s mode", c.Mode)
 		}
-		if cm.config.ProxyPort == "" {
-			return fmt.Errorf("proxyPort is required for %s mode", cm.config.Mode)
+		if c.ProxyPort == "" {
+			return fmt.Errorf("proxyPort is required for %s mode", c.Mode)
 		}
-		if cm.config.Mode == "sni" && cm.config.FrontDomain == "" {
+		if c.Mode == "sni" && c.FrontDomain == "" {
 			return fmt.Errorf("frontDomain is required for sni mode")
 		}
 	}
-
-	// Set defaults
-	cm.setDefaults()
 
 	return nil
 }
 
 // setDefaults sets default values for optional fields
-func (cm *ConfigManager) setDefaults() {
-	if cm.config.TargetPort == "" {
-		cm.config.TargetPort = "22"
+func (c *Config) setDefaults() {
+	if c.TargetPort == "" {
+		c.TargetPort = "22"
 	}
-	if cm.config.SSH.Port == "" {
-		cm.config.SSH.Port = "22"
+	if c.SSH.Port == "" {
+		c.SSH.Port = "22"
 	}
-	if cm.config.LocalPort == 0 {
-		cm.config.LocalPort = 1080
+	if c.LocalPort == 0 {
+		c.LocalPort = 1080
 	}
-	if cm.config.ProxyType == "" {
-		cm.config.ProxyType = "socks5"
+	if c.ProxyType == "" {
+		c.ProxyType = "socks5"
 	}
-	if cm.config.Timeout == 0 {
-		cm.config.Timeout = 30
+	if c.Timeout == 0 {
+		c.Timeout = 30
 	}
 }
 
-// GetConfig returns the loaded configuration
-func (cm *ConfigManager) GetConfig() *Config {
-	return cm.config
+// contains checks if a string slice contains a specific string
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
