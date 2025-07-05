@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"tunn/internal/tunnel"
+	"tunn/pkg/config"
 
 	"github.com/spf13/cobra"
 )
@@ -56,18 +56,18 @@ func init() {
 
 func generateConfig(cmd *cobra.Command, args []string) {
 	// Create sample configurations for different modes
-	var sampleConfig *tunnel.Config
+	var sampleConfig *config.Config
 
 	switch generateFlags.mode {
 	case "proxy":
-		sampleConfig = &tunnel.Config{
+		sampleConfig = &config.Config{
 			Mode:        "proxy",
 			TargetHost:  "target.example.com",
 			TargetPort:  "22",
 			ProxyHost:   "proxy.example.com",
 			ProxyPort:   "80",
 			FrontDomain: "google.com",
-			SSH: tunnel.SSHConfig{
+			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
 				Port:     "22",
@@ -78,14 +78,14 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			Timeout:   30,
 		}
 	case "sni":
-		sampleConfig = &tunnel.Config{
+		sampleConfig = &config.Config{
 			Mode:        "sni",
 			TargetHost:  "target.example.com",
 			TargetPort:  "22",
 			ProxyHost:   "proxy.example.com",
 			ProxyPort:   "443",
 			FrontDomain: "cloudflare.com",
-			SSH: tunnel.SSHConfig{
+			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
 				Port:     "22",
@@ -96,12 +96,12 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			Timeout:   30,
 		}
 	case "direct":
-		sampleConfig = &tunnel.Config{
+		sampleConfig = &config.Config{
 			Mode:        "direct",
 			TargetHost:  "us2.ws-tun.me",
 			TargetPort:  "80",
 			FrontDomain: "config.rcs.mnc840.mcc405.pub.3gppnetwork.org",
-			SSH: tunnel.SSHConfig{
+			SSH: config.SSHConfig{
 				Username: "sshstores-ayan",
 				Password: "1234",
 				Port:     "22",
@@ -145,7 +145,7 @@ func validateConfig(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	config, err := tunnel.LoadConfig(configPath)
+	config, err := config.LoadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Error: Configuration validation failed: %v\n", err)
 		os.Exit(1)
