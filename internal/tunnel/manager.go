@@ -29,7 +29,7 @@ func NewManager(cfg *config.Config) *Manager {
 // Start starts the tunnel and proxy server
 func (m *Manager) Start() error {
 	// Establish connection
-	establisher, err := connection.GetEstablisher(m.config.Mode)
+	establisher, err := connection.GetEstablisher(m.config.ConnectionMode)
 	if err != nil {
 		return fmt.Errorf("failed to get connection establisher: %w", err)
 	}
@@ -54,7 +54,8 @@ func (m *Manager) Start() error {
 		return fmt.Errorf("failed to start proxy: %w", err)
 	}
 
-	fmt.Printf("[*] Tunnel established and %s proxy running on port %d\n", m.config.ProxyType, m.config.LocalPort)
+	fmt.Printf("\n✓ Tunnel established and %s proxy running on port %d\n", m.config.ProxyType, m.config.ListenPort)
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
 	// Wait for shutdown signal
 	m.waitForShutdown()
@@ -68,11 +69,11 @@ func (m *Manager) startProxy() error {
 	case "socks5", "socks":
 		socksProxy := proxy.NewSOCKS5(m.sshClient)
 		m.proxyServer = socksProxy
-		return socksProxy.Start(m.config.LocalPort)
+		return socksProxy.Start(m.config.ListenPort)
 	case "http":
 		httpProxy := proxy.NewHTTP(m.sshClient)
 		m.proxyServer = httpProxy
-		return httpProxy.Start(m.config.LocalPort)
+		return httpProxy.Start(m.config.ListenPort)
 	default:
 		return fmt.Errorf("unsupported proxy type: %s", m.config.ProxyType)
 	}
@@ -84,11 +85,11 @@ func (m *Manager) waitForShutdown() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	<-sigChan
-	fmt.Println("\n[*] Shutdown signal received, closing tunnel...")
+	fmt.Println("\n→ Shutdown signal received, closing tunnel...")
 
 	if m.sshClient != nil {
 		m.sshClient.Close()
 	}
 
-	fmt.Println("[*] Tunnel closed.")
+	fmt.Println("✓ Tunnel closed.")
 }

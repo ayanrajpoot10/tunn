@@ -45,14 +45,9 @@ func init() {
 	rootCmd.SetHelpCommand(&cobra.Command{Use: "no-help", Hidden: true})
 }
 
-// GetConfig returns the loaded configuration
-func GetConfig() *config.Config {
-	return tunnelConfig
-}
-
 func runTunnel(cmd *cobra.Command, args []string) {
-	fmt.Printf("[*] Using mode: %s\n", tunnelConfig.Mode)
-	fmt.Printf("[*] Starting tunnel using %s mode with %s local proxy\n", tunnelConfig.Mode, tunnelConfig.ProxyType)
+	fmt.Printf("Mode: %s\n", tunnelConfig.ConnectionMode)
+	fmt.Printf("\n")
 
 	// Create and start tunnel manager
 	manager := tunnel.NewManager(tunnelConfig)

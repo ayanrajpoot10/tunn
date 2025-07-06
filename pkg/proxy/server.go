@@ -31,7 +31,7 @@ func (p *Server) StartProxy(proxyType string, localPort int, handler func(net.Co
 		return fmt.Errorf("failed to start %s proxy: %v", proxyType, err)
 	}
 
-	fmt.Printf("[*] %s proxy listening on 127.0.0.1:%d\n", proxyType, localPort)
+	fmt.Printf("→ %s proxy listening on 127.0.0.1:%d\n", proxyType, localPort)
 
 	go func() {
 		defer listener.Close()
@@ -39,10 +39,10 @@ func (p *Server) StartProxy(proxyType string, localPort int, handler func(net.Co
 			clientConn, err := listener.Accept()
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && !netErr.Temporary() {
-					fmt.Printf("[*] %s proxy listener closed\n", proxyType)
+					fmt.Printf("→ %s proxy listener closed\n", proxyType)
 					return
 				}
-				fmt.Printf("[!] Error accepting connection: %v\n", err)
+				fmt.Printf("✗ Error accepting connection: %v\n", err)
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
@@ -51,7 +51,7 @@ func (p *Server) StartProxy(proxyType string, localPort int, handler func(net.Co
 		}
 	}()
 
-	fmt.Printf("[*] %s proxy started.\n", proxyType)
+	fmt.Printf("✓ %s proxy started.\n", proxyType)
 	return nil
 }
 
@@ -60,7 +60,7 @@ func (p *Server) HandleClientWithTimeout(clientConn net.Conn, clientType string,
 	defer func() {
 		clientConn.Close()
 		if r := recover(); r != nil {
-			fmt.Printf("[!] Panic in %s handler: %v\n", clientType, r)
+			fmt.Printf("✗ Panic in %s handler: %v\n", clientType, r)
 		}
 	}()
 
@@ -73,21 +73,21 @@ func (p *Server) HandleClientWithTimeout(clientConn net.Conn, clientType string,
 
 // OpenSSHChannel opens an SSH channel and forwards data
 func (p *Server) OpenSSHChannel(clientConn net.Conn, host string, port int) {
-	fmt.Printf("[*] Opening SSH channel to %s:%d\n", host, port)
+	fmt.Printf("→ Opening SSH channel to %s:%d\n", host, port)
 
 	// Open SSH channel with retry logic
 	sshConn, err := p.dialWithRetry(host, port)
 	if err != nil {
-		fmt.Printf("[!] Failed to open SSH channel: %v\n", err)
+		fmt.Printf("✗ Failed to open SSH channel: %v\n", err)
 		return
 	}
 	defer sshConn.Close()
 
-	fmt.Printf("[+] SSH channel established to %s:%d\n", host, port)
+	fmt.Printf("✓ SSH channel established to %s:%d\n", host, port)
 
 	// Forward data bidirectionally
 	p.forwardData(clientConn, sshConn)
-	fmt.Printf("[*] SSH channel to %s:%d closed\n", host, port)
+	fmt.Printf("→ SSH channel to %s:%d closed\n", host, port)
 }
 
 // dialWithRetry attempts to dial with retry logic
@@ -104,7 +104,7 @@ func (p *Server) dialWithRetry(host string, port int) (net.Conn, error) {
 			return conn, nil
 		}
 
-		fmt.Printf("[!] SSH channel attempt %d failed: %v\n", retries+1, err)
+		fmt.Printf("✗ SSH channel attempt %d failed: %v\n", retries+1, err)
 		if retries < 2 {
 			time.Sleep(time.Duration(retries+1) * time.Second)
 		}
@@ -147,7 +147,7 @@ func (p *Server) copyData(src, dst net.Conn, srcName, dstName string) {
 				continue // Continue on timeout
 			}
 			if err != io.EOF {
-				fmt.Printf("[!] Error reading from %s: %v\n", srcName, err)
+				fmt.Printf("✗ Error reading from %s: %v\n", srcName, err)
 			}
 			return
 		}
@@ -158,7 +158,7 @@ func (p *Server) copyData(src, dst net.Conn, srcName, dstName string) {
 			_, err := dst.Write(buffer[:n])
 			if err != nil {
 				if err != io.EOF {
-					fmt.Printf("[!] Error writing to %s: %v\n", dstName, err)
+					fmt.Printf("✗ Error writing to %s: %v\n", dstName, err)
 				}
 				return
 			}

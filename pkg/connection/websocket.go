@@ -19,18 +19,18 @@ func (w *WebSocketEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	return EstablishWSTunnel(
 		cfg.ProxyHost,
 		cfg.ProxyPort,
-		cfg.TargetHost,
-		cfg.TargetPort,
-		cfg.Payload,
-		cfg.FrontDomain,
+		cfg.ServerHost,
+		cfg.ServerPort,
+		cfg.HTTPPayload,
+		cfg.SpoofedHost,
 		cfg.ProxyPort == "443", // Use TLS if port is 443
 		nil,
 	)
 }
 
 // ReplacePlaceholders replaces [host] and [crlf] placeholders in the payload
-func ReplacePlaceholders(payload, targetHost, targetPort, frontDomain string) []byte {
-	hostValue := frontDomain
+func ReplacePlaceholders(payload, targetHost, targetPort, hostHeader string) []byte {
+	hostValue := hostHeader
 	if hostValue == "" {
 		hostValue = net.JoinHostPort(targetHost, targetPort)
 	}
@@ -62,7 +62,7 @@ func ReadHeaders(conn net.Conn) ([]byte, error) {
 }
 
 // EstablishWSTunnel performs the WebSocket upgrade handshake
-func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, frontDomain string, useTLS bool, conn net.Conn) (net.Conn, error) {
+func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, hostHeader string, useTLS bool, conn net.Conn) (net.Conn, error) {
 	// Connect if no existing connection
 	if conn == nil {
 		address := net.JoinHostPort(targetHost, targetPort)
@@ -70,12 +70,12 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, fr
 			address = net.JoinHostPort(proxyHost, proxyPort)
 		}
 
-		fmt.Printf("[*] Connecting to %s\n", address)
+		fmt.Printf("→ Connecting to %s\n", address)
 
 		var err error
 		if useTLS {
 			tlsConfig := &tls.Config{
-				ServerName: frontDomain,
+				ServerName: hostHeader,
 				MinVersion: tls.VersionTLS12,
 			}
 			conn, err = tls.DialWithDialer(
@@ -95,8 +95,8 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, fr
 
 	// Send WebSocket upgrade request
 	if payload != "" {
-		wsPayload := ReplacePlaceholders(payload, targetHost, targetPort, frontDomain)
-		fmt.Printf("[*] Sending WebSocket upgrade request\n")
+		wsPayload := ReplacePlaceholders(payload, targetHost, targetPort, hostHeader)
+		fmt.Printf("→ Sending WebSocket upgrade request\n")
 
 		if _, err := conn.Write(wsPayload); err != nil {
 			conn.Close()
@@ -110,6 +110,10 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, fr
 			return nil, fmt.Errorf("failed to read WebSocket response: %w", err)
 		}
 
+		// Print the response received from WebSocket request
+		fmt.Printf("← WebSocket response received:\n")
+		fmt.Printf("  %s\n", strings.ReplaceAll(string(headers), "\r\n", "\n  "))
+
 		// Check if upgrade was successful
 		headerStr := string(headers)
 		if !strings.Contains(headerStr, "HTTP/1.1 101") &&
@@ -118,14 +122,14 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, fr
 			return nil, fmt.Errorf("WebSocket upgrade failed: %s", headerStr)
 		}
 
-		fmt.Printf("[+] WebSocket tunnel established\n")
+		fmt.Printf("✓ WebSocket tunnel established\n")
 	}
 
 	return conn, nil
 }
 
 // ConnectViaWebSocketTransport establishes a WebSocket tunnel connection
-func ConnectViaWebSocketTransport(targetHost, targetPort, proxyHost, proxyPort, frontDomain, payload string) (net.Conn, error) {
+func ConnectViaWebSocketTransport(targetHost, targetPort, proxyHost, proxyPort, hostHeader, payload string) (net.Conn, error) {
 	useTLS := proxyPort == "443"
-	return EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, frontDomain, useTLS, nil)
+	return EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, hostHeader, useTLS, nil)
 }

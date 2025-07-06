@@ -35,11 +35,11 @@ func NewOverWebSocket(conn net.Conn, username, password, port string) *OverWebSo
 
 // StartTransport initializes the SSH client over the WebSocket connection
 func (s *OverWebSocket) StartTransport() error {
-	fmt.Println("[*] Starting SSH transport over WebSocket connection...")
+	fmt.Println("→ Starting SSH transport over WebSocket connection...")
 
 	// Set keepalive on the underlying WebSocket connection if it's TCP
 	if tcpConn, ok := s.conn.(*net.TCPConn); ok {
-		fmt.Println("[*] Setting keepalive on WebSocket connection...")
+		fmt.Println("→ Setting keepalive on WebSocket connection...")
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
@@ -57,7 +57,7 @@ func (s *OverWebSocket) StartTransport() error {
 		Timeout:         15 * time.Second,
 	}
 
-	fmt.Printf("[*] Attempting SSH connection with user: %s\n", s.username)
+	fmt.Printf("→ Attempting SSH connection with user: %s\n", s.username)
 
 	// Create SSH client using the WebSocket connection
 	sshConn, chans, reqs, err := ssh.NewClientConn(s.conn, "tcp", config)
@@ -66,7 +66,7 @@ func (s *OverWebSocket) StartTransport() error {
 	}
 
 	s.sshClient = ssh.NewClient(sshConn, chans, reqs)
-	fmt.Println("[*] SSH transport established and authenticated.")
+	fmt.Println("✓ SSH transport established and authenticated.")
 	return nil
 }
 

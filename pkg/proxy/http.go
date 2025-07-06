@@ -37,7 +37,7 @@ func (h *HTTP) handleClient(clientConn net.Conn) {
 		reader := bufio.NewReader(clientConn)
 		req, err := http.ReadRequest(reader)
 		if err != nil {
-			fmt.Printf("[!] Error reading HTTP request: %v\n", err)
+			fmt.Printf("✗ Error reading HTTP request: %v\n", err)
 			h.sendError(clientConn, 400, "Bad Request")
 			return
 		}
@@ -54,21 +54,21 @@ func (h *HTTP) handleClient(clientConn net.Conn) {
 func (h *HTTP) handleConnect(clientConn net.Conn, req *http.Request) {
 	host, portInt, err := utils.ParseHostPort(req.Host, 443)
 	if err != nil {
-		fmt.Printf("[!] Invalid host in CONNECT request: %v\n", err)
+		fmt.Printf("✗ Invalid host in CONNECT request: %v\n", err)
 		h.sendError(clientConn, 400, "Bad Request")
 		return
 	}
 
-	fmt.Printf("[*] HTTP CONNECT request to %s:%d\n", host, portInt)
+	fmt.Printf("→ HTTP CONNECT request to %s:%d\n", host, portInt)
 
 	// Send success response
 	response := "HTTP/1.1 200 Connection established\r\n\r\n"
 	if _, err := clientConn.Write([]byte(response)); err != nil {
-		fmt.Printf("[!] Error sending CONNECT response: %v\n", err)
+		fmt.Printf("✗ Error sending CONNECT response: %v\n", err)
 		return
 	}
 
-	fmt.Printf("[+] HTTP CONNECT tunnel established to %s:%d\n", host, portInt)
+	fmt.Printf("✓ HTTP CONNECT tunnel established to %s:%d\n", host, portInt)
 	h.server.OpenSSHChannel(clientConn, host, portInt)
 }
 
@@ -76,18 +76,18 @@ func (h *HTTP) handleConnect(clientConn net.Conn, req *http.Request) {
 func (h *HTTP) handleRequest(clientConn net.Conn, req *http.Request) {
 	targetHost, targetPort, targetPath, err := h.parseTarget(req)
 	if err != nil {
-		fmt.Printf("[!] Error parsing HTTP target: %v\n", err)
+		fmt.Printf("✗ Error parsing HTTP target: %v\n", err)
 		h.sendError(clientConn, 400, "Bad Request")
 		return
 	}
 
-	fmt.Printf("[*] HTTP %s request to %s:%d%s\n", req.Method, targetHost, targetPort, targetPath)
+	fmt.Printf("→ HTTP %s request to %s:%d%s\n", req.Method, targetHost, targetPort, targetPath)
 
 	// Open SSH channel to target
 	address := net.JoinHostPort(targetHost, strconv.Itoa(targetPort))
 	sshConn, err := h.server.ssh.Dial("tcp", address)
 	if err != nil {
-		fmt.Printf("[!] Failed to open SSH channel for HTTP request: %v\n", err)
+		fmt.Printf("✗ Failed to open SSH channel for HTTP request: %v\n", err)
 		h.sendError(clientConn, 502, "Bad Gateway")
 		return
 	}
@@ -95,7 +95,7 @@ func (h *HTTP) handleRequest(clientConn net.Conn, req *http.Request) {
 
 	// Forward the HTTP request and response
 	if err := h.forwardRequest(sshConn, req, targetPath); err != nil {
-		fmt.Printf("[!] Error forwarding HTTP request: %v\n", err)
+		fmt.Printf("✗ Error forwarding HTTP request: %v\n", err)
 		h.sendError(clientConn, 502, "Bad Gateway")
 		return
 	}
@@ -186,7 +186,7 @@ func (h *HTTP) forwardResponse(clientConn net.Conn, sshConn net.Conn) {
 	// Simply forward all data from SSH connection back to client
 	_, err := io.Copy(clientConn, sshConn)
 	if err != nil && err != io.EOF {
-		fmt.Printf("[!] Error forwarding HTTP response: %v\n", err)
+		fmt.Printf("✗ Error forwarding HTTP response: %v\n", err)
 	}
 }
 

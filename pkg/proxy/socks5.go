@@ -30,7 +30,7 @@ func (s *SOCKS5) handleClient(clientConn net.Conn) {
 	s.server.HandleClientWithTimeout(clientConn, "SOCKS5", 10*time.Second, func() {
 		versionByte := make([]byte, 1)
 		if _, err := clientConn.Read(versionByte); err != nil {
-			fmt.Printf("[!] Error reading SOCKS version: %v\n", err)
+			fmt.Printf("✗ Error reading SOCKS version: %v\n", err)
 			return
 		}
 
@@ -38,7 +38,7 @@ func (s *SOCKS5) handleClient(clientConn net.Conn) {
 		case 5:
 			s.handleSOCKS5(clientConn, versionByte[0])
 		default:
-			fmt.Printf("[!] Unsupported SOCKS version: %d (only SOCKS5 supported)\n", versionByte[0])
+			fmt.Printf("✗ Unsupported SOCKS version: %d (only SOCKS5 supported)\n", versionByte[0])
 		}
 	})
 }
@@ -49,7 +49,7 @@ func (s *SOCKS5) handleSOCKS5(clientConn net.Conn, version byte) {
 	nmethodsByte := make([]byte, 1)
 	_, err := clientConn.Read(nmethodsByte)
 	if err != nil {
-		fmt.Printf("[!] Error reading SOCKS5 nmethods: %v\n", err)
+		fmt.Printf("✗ Error reading SOCKS5 nmethods: %v\n", err)
 		return
 	}
 
@@ -57,7 +57,7 @@ func (s *SOCKS5) handleSOCKS5(clientConn net.Conn, version byte) {
 	methods := make([]byte, nmethods)
 	_, err = io.ReadFull(clientConn, methods)
 	if err != nil {
-		fmt.Printf("[!] Error reading SOCKS5 methods: %v\n", err)
+		fmt.Printf("✗ Error reading SOCKS5 methods: %v\n", err)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (s *SOCKS5) handleSOCKS5(clientConn net.Conn, version byte) {
 	requestHeader := make([]byte, 4) // ver, cmd, rsv, atyp
 	_, err = io.ReadFull(clientConn, requestHeader)
 	if err != nil {
-		fmt.Printf("[!] Error reading SOCKS5 request header: %v\n", err)
+		fmt.Printf("✗ Error reading SOCKS5 request header: %v\n", err)
 		return
 	}
 

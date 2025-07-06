@@ -14,9 +14,6 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Configuration management commands",
-	Long: `Manage Tunn configurations including creating templates and validating configs.
-
-This command provides utilities for working with simplified configuration files.`,
 }
 
 var generateCmd = &cobra.Command{
@@ -61,55 +58,55 @@ func generateConfig(cmd *cobra.Command, args []string) {
 	switch generateFlags.mode {
 	case "proxy":
 		sampleConfig = &config.Config{
-			Mode:        "proxy",
-			TargetHost:  "target.example.com",
-			TargetPort:  "22",
-			ProxyHost:   "proxy.example.com",
-			ProxyPort:   "80",
-			FrontDomain: "google.com",
+			ConnectionMode: "proxy",
+			ServerHost:     "target.example.com",
+			ServerPort:     "80",
+			ProxyHost:      "proxy.example.com",
+			ProxyPort:      "80",
+			SpoofedHost:    "google.com",
 			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
 				Port:     "22",
 			},
-			LocalPort: 1080,
-			ProxyType: "socks5",
-			Payload:   "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
-			Timeout:   30,
+			ListenPort:        1080,
+			ProxyType:         "socks5",
+			HTTPPayload:       "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
+			ConnectionTimeout: 30,
 		}
 	case "sni":
 		sampleConfig = &config.Config{
-			Mode:        "sni",
-			TargetHost:  "target.example.com",
-			TargetPort:  "22",
-			ProxyHost:   "proxy.example.com",
-			ProxyPort:   "443",
-			FrontDomain: "cloudflare.com",
+			ConnectionMode: "sni",
+			ServerHost:     "target.example.com",
+			ServerPort:     "443",
+			ProxyHost:      "proxy.example.com",
+			ProxyPort:      "443",
+			SpoofedHost:    "cloudflare.com",
 			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
 				Port:     "22",
 			},
-			LocalPort: 1080,
-			ProxyType: "socks5",
-			Payload:   "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
-			Timeout:   30,
+			ListenPort:        1080,
+			ProxyType:         "socks5",
+			HTTPPayload:       "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
+			ConnectionTimeout: 30,
 		}
 	case "direct":
 		sampleConfig = &config.Config{
-			Mode:        "direct",
-			TargetHost:  "us2.ws-tun.me",
-			TargetPort:  "80",
-			FrontDomain: "config.rcs.mnc840.mcc405.pub.3gppnetwork.org",
+			ConnectionMode: "direct",
+			ServerHost:     "target.example.com",
+			ServerPort:     "80",
+			SpoofedHost:    "cloudflare.com",
 			SSH: config.SSHConfig{
-				Username: "sshstores-ayan",
-				Password: "1234",
+				Username: "user",
+				Password: "password",
 				Port:     "22",
 			},
-			LocalPort: 1080,
-			ProxyType: "http",
-			Payload:   "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
-			Timeout:   30,
+			ListenPort:        1080,
+			ProxyType:         "http",
+			HTTPPayload:       "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
+			ConnectionTimeout: 30,
 		}
 	default:
 		fmt.Printf("Error: Unsupported mode: %s (supported: proxy, sni, direct)\n", generateFlags.mode)
@@ -132,10 +129,6 @@ func generateConfig(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("Success: Sample %s mode configuration generated: %s\n", generateFlags.mode, generateFlags.output)
-	fmt.Println("\nRemember to:")
-	fmt.Println("   1. Update target host and SSH credentials")
-	fmt.Println("   2. Modify proxy settings if needed")
-	fmt.Println("   3. Validate the config with: tunn config validate --config", generateFlags.output)
 }
 
 func validateConfig(cmd *cobra.Command, args []string) {
@@ -153,15 +146,15 @@ func validateConfig(cmd *cobra.Command, args []string) {
 
 	fmt.Printf("Success: Configuration file is valid: %s\n", configPath)
 	fmt.Printf("Configuration Summary:\n")
-	fmt.Printf("   - Mode: %s\n", config.Mode)
-	fmt.Printf("   - Target: %s:%s\n", config.TargetHost, config.TargetPort)
+	fmt.Printf("   - Mode: %s\n", config.ConnectionMode)
+	fmt.Printf("   - Target: %s:%s\n", config.ServerHost, config.ServerPort)
 	if config.ProxyHost != "" {
 		fmt.Printf("   - Proxy: %s:%s\n", config.ProxyHost, config.ProxyPort)
 	}
-	if config.FrontDomain != "" {
-		fmt.Printf("   - Front Domain: %s\n", config.FrontDomain)
+	if config.SpoofedHost != "" {
+		fmt.Printf("   - Spoofed Host: %s\n", config.SpoofedHost)
 	}
 	fmt.Printf("   - SSH User: %s\n", config.SSH.Username)
-	fmt.Printf("   - Local Port: %d (%s)\n", config.LocalPort, config.ProxyType)
-	fmt.Printf("   - Timeout: %d seconds\n", config.Timeout)
+	fmt.Printf("   - Local Port: %d (%s)\n", config.ListenPort, config.ProxyType)
+	fmt.Printf("   - Timeout: %d seconds\n", config.ConnectionTimeout)
 }
