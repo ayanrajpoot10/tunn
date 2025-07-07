@@ -8,25 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"tunn/pkg/config"
 )
-
-// WebSocketEstablisher handles WebSocket-based connections
-type WebSocketEstablisher struct{}
-
-// Establish creates a WebSocket connection
-func (w *WebSocketEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
-	return EstablishWSTunnel(
-		cfg.ProxyHost,
-		cfg.ProxyPort,
-		cfg.ServerHost,
-		cfg.ServerPort,
-		cfg.HTTPPayload,
-		cfg.SpoofedHost,
-		cfg.ProxyPort == "443", // Use TLS if port is 443
-		nil,
-	)
-}
 
 // ReplacePlaceholders replaces [host] and [crlf] placeholders in the payload
 func ReplacePlaceholders(payload, targetHost, targetPort, hostHeader string) []byte {
@@ -52,7 +34,6 @@ func ReadHeaders(conn net.Conn) ([]byte, error) {
 		}
 		if n > 0 {
 			data = append(data, buffer[0])
-			// Check if we have the complete header (ending with \r\n\r\n)
 			if len(data) >= 4 && bytes.HasSuffix(data, []byte("\r\n\r\n")) {
 				break
 			}
@@ -112,7 +93,8 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, ho
 
 		// Print the response received from WebSocket request
 		fmt.Printf("← WebSocket response received:\n")
-		fmt.Printf("  %s\n", strings.ReplaceAll(string(headers), "\r\n", "\n  "))
+		responseText := strings.TrimSpace(string(headers))
+		fmt.Printf("  %s\n", strings.ReplaceAll(responseText, "\r\n", "\n  "))
 
 		// Check if upgrade was successful
 		headerStr := string(headers)
@@ -126,10 +108,4 @@ func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, ho
 	}
 
 	return conn, nil
-}
-
-// ConnectViaWebSocketTransport establishes a WebSocket tunnel connection
-func ConnectViaWebSocketTransport(targetHost, targetPort, proxyHost, proxyPort, hostHeader, payload string) (net.Conn, error) {
-	useTLS := proxyPort == "443"
-	return EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, hostHeader, useTLS, nil)
 }

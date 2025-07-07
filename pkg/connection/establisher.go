@@ -20,7 +20,6 @@ type DirectEstablisher struct{}
 // Establish creates a direct connection to the target with WebSocket upgrade
 func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	address := net.JoinHostPort(cfg.ServerHost, cfg.ServerPort)
-	fmt.Printf("→ Establishing direct connection to %s\n", address)
 
 	// For direct mode, we still need to establish WebSocket tunnel if payload is provided
 	if cfg.HTTPPayload != "" {
@@ -36,7 +35,6 @@ func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to establish WebSocket tunnel: %w", err)
 		}
-		fmt.Printf("✓ Direct WebSocket connection established to %s\n", address)
 		return conn, nil
 	}
 
@@ -46,7 +44,6 @@ func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 		return nil, fmt.Errorf("failed to connect directly: %w", err)
 	}
 
-	fmt.Printf("✓ Direct connection established to %s\n", address)
 	return conn, nil
 }
 

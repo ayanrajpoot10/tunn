@@ -52,7 +52,6 @@ func init() {
 }
 
 func generateConfig(cmd *cobra.Command, args []string) {
-	// Create sample configurations for different modes
 	var sampleConfig *config.Config
 
 	switch generateFlags.mode {
@@ -63,13 +62,13 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			ServerPort:     "80",
 			ProxyHost:      "proxy.example.com",
 			ProxyPort:      "80",
+			
 			SpoofedHost:    "google.com",
-			SSH: config.SSHConfig{
+				SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
-				Port:     "22",
-			},
-			ListenPort:        1080,
+				},
+				ListenPort:        1080,
 			ProxyType:         "socks5",
 			HTTPPayload:       "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
 			ConnectionTimeout: 30,
@@ -85,7 +84,6 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
-				Port:     "22",
 			},
 			ListenPort:        1080,
 			ProxyType:         "socks5",
@@ -101,7 +99,6 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
-				Port:     "22",
 			},
 			ListenPort:        1080,
 			ProxyType:         "http",

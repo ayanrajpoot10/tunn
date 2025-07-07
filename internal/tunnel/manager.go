@@ -40,7 +40,7 @@ func (m *Manager) Start() error {
 	}
 
 	// Create SSH client
-	m.sshClient = ssh.NewOverWebSocket(conn, m.config.SSH.Username, m.config.SSH.Password, m.config.SSH.Port)
+	m.sshClient = ssh.NewOverWebSocket(conn, m.config.SSH.Username, m.config.SSH.Password)
 
 	// Start SSH transport
 	if sshOverWS, ok := m.sshClient.(*ssh.OverWebSocket); ok {
@@ -55,7 +55,7 @@ func (m *Manager) Start() error {
 	}
 
 	fmt.Printf("\n✓ Tunnel established and %s proxy running on port %d\n", m.config.ProxyType, m.config.ListenPort)
-	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
 	// Wait for shutdown signal
 	m.waitForShutdown()

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 )
 
 // Config represents the tunnel configuration structure
@@ -33,7 +32,6 @@ type Config struct {
 type SSHConfig struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Port     string `json:"port,omitempty"` // SSH port (default: 22)
 }
 
 // LoadConfig loads and validates configuration from file
@@ -63,11 +61,12 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // validate validates the configuration
 func (c *Config) validate() error {
-	validModes := []string{"proxy", "sni", "direct"}
-	if !contains(validModes, c.ConnectionMode) {
-		return fmt.Errorf("invalid mode '%s', must be one of: %s", c.ConnectionMode, strings.Join(validModes, ", "))
+	validModes := map[string]bool{"proxy": true, "sni": true, "direct": true}
+	if !validModes[c.ConnectionMode] {
+		return fmt.Errorf("invalid mode '%s', must be one of: proxy, sni, direct", c.ConnectionMode)
 	}
 
+	// Check required fields
 	if c.ServerHost == "" {
 		return fmt.Errorf("serverHost is required")
 	}
@@ -78,12 +77,10 @@ func (c *Config) validate() error {
 		return fmt.Errorf("SSH password is required")
 	}
 
+	// Validate proxy/sni mode requirements
 	if c.ConnectionMode == "proxy" || c.ConnectionMode == "sni" {
-		if c.ProxyHost == "" {
-			return fmt.Errorf("proxyHost is required for %s mode", c.ConnectionMode)
-		}
-		if c.ProxyPort == "" {
-			return fmt.Errorf("proxyPort is required for %s mode", c.ConnectionMode)
+		if c.ProxyHost == "" || c.ProxyPort == "" {
+			return fmt.Errorf("proxyHost and proxyPort are required for %s mode", c.ConnectionMode)
 		}
 		if c.ConnectionMode == "sni" && c.SpoofedHost == "" {
 			return fmt.Errorf("spoofedHost is required for sni mode")
@@ -98,9 +95,6 @@ func (c *Config) setDefaults() {
 	if c.ServerPort == "" {
 		c.ServerPort = "22"
 	}
-	if c.SSH.Port == "" {
-		c.SSH.Port = "22"
-	}
 	if c.ListenPort == 0 {
 		c.ListenPort = 1080
 	}
@@ -110,14 +104,4 @@ func (c *Config) setDefaults() {
 	if c.ConnectionTimeout == 0 {
 		c.ConnectionTimeout = 30
 	}
-}
-
-// contains checks if a string slice contains a specific string
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

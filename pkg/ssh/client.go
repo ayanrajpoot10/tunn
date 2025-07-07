@@ -20,16 +20,14 @@ type OverWebSocket struct {
 	sshClient *ssh.Client
 	username  string
 	password  string
-	port      string
 }
 
 // NewOverWebSocket creates a new SSH over WebSocket connection
-func NewOverWebSocket(conn net.Conn, username, password, port string) *OverWebSocket {
+func NewOverWebSocket(conn net.Conn, username, password string) *OverWebSocket {
 	return &OverWebSocket{
 		conn:     conn,
 		username: username,
 		password: password,
-		port:     port,
 	}
 }
 
@@ -81,9 +79,4 @@ func (s *OverWebSocket) Close() error {
 		return s.sshClient.Close()
 	}
 	return nil
-}
-
-// GetUnderlyingClient returns the underlying SSH client for advanced operations
-func (s *OverWebSocket) GetUnderlyingClient() *ssh.Client {
-	return s.sshClient
 }

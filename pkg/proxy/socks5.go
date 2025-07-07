@@ -36,7 +36,7 @@ func (s *SOCKS5) handleClient(clientConn net.Conn) {
 
 		switch versionByte[0] {
 		case 5:
-			s.handleSOCKS5(clientConn, versionByte[0])
+			s.handleSOCKS5(clientConn)
 		default:
 			fmt.Printf("✗ Unsupported SOCKS version: %d (only SOCKS5 supported)\n", versionByte[0])
 		}
@@ -44,7 +44,7 @@ func (s *SOCKS5) handleClient(clientConn net.Conn) {
 }
 
 // handleSOCKS5 handles SOCKS5 protocol
-func (s *SOCKS5) handleSOCKS5(clientConn net.Conn, version byte) {
+func (s *SOCKS5) handleSOCKS5(clientConn net.Conn) {
 	// Read number of methods
 	nmethodsByte := make([]byte, 1)
 	_, err := clientConn.Read(nmethodsByte)
