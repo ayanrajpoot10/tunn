@@ -70,7 +70,7 @@ func generateConfig(cmd *cobra.Command, args []string) {
 				},
 				ListenPort:        1080,
 			ProxyType:         "socks5",
-			HTTPPayload:       "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
+			HTTPPayload:       "HEAD / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]",
 			ConnectionTimeout: 30,
 		}
 	case "sni":
@@ -87,7 +87,7 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			},
 			ListenPort:        1080,
 			ProxyType:         "socks5",
-			HTTPPayload:       "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
+			HTTPPayload:       "HEAD / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]",
 			ConnectionTimeout: 30,
 		}
 	case "direct":
@@ -102,7 +102,7 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			},
 			ListenPort:        1080,
 			ProxyType:         "http",
-			HTTPPayload:       "GET / HTTP/1.1\r\nHost: [host]\r\nUpgrade: websocket\r\n\r\n",
+			HTTPPayload:       "HEAD / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]",
 			ConnectionTimeout: 30,
 		}
 	default:
