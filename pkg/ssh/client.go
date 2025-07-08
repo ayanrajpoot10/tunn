@@ -3,9 +3,12 @@ package ssh
 import (
 	"fmt"
 	"net"
+	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/html"
 )
 
 // Client represents an SSH client that can operate over any net.Conn
@@ -31,6 +34,26 @@ func NewOverWebSocket(conn net.Conn, username, password string) *OverWebSocket {
 	}
 }
 
+// stripHTMLTags removes HTML tags from a string and returns plain text.
+func stripHTMLTags(htmlStr string) string {
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		return htmlStr // fallback to original if parsing fails
+	}
+	var b strings.Builder
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			b.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(doc)
+	return b.String()
+}
+
 // StartTransport initializes the SSH client over the WebSocket connection
 func (s *OverWebSocket) StartTransport() error {
 	fmt.Println("→ Starting SSH transport over WebSocket connection...")
@@ -42,9 +65,9 @@ func (s *OverWebSocket) StartTransport() error {
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
 
-	// Clear any previous deadlines
-	s.conn.SetReadDeadline(time.Time{})
-	s.conn.SetWriteDeadline(time.Time{})
+	// Set a deadline for the SSH handshake to avoid hanging
+	handshakeTimeout := 15 * time.Second
+	s.conn.SetDeadline(time.Now().Add(handshakeTimeout))
 
 	config := &ssh.ClientConfig{
 		User: s.username,
@@ -52,7 +75,12 @@ func (s *OverWebSocket) StartTransport() error {
 			ssh.Password(s.password),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // WARNING: This is insecure for production
-		Timeout:         15 * time.Second,
+		Timeout:         handshakeTimeout,
+		BannerCallback: func(message string) error {
+			plain := stripHTMLTags(message)
+			fmt.Fprintln(stderrOrStdout(), plain)
+			return nil
+		},
 	}
 
 	fmt.Printf("→ Attempting SSH connection with user: %s\n", s.username)
@@ -60,8 +88,14 @@ func (s *OverWebSocket) StartTransport() error {
 	// Create SSH client using the WebSocket connection
 	sshConn, chans, reqs, err := ssh.NewClientConn(s.conn, "tcp", config)
 	if err != nil {
+		if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
+			return fmt.Errorf("SSH handshake timed out after %v", handshakeTimeout)
+		}
 		return fmt.Errorf("failed to create SSH connection: %v", err)
 	}
+
+	// Clear deadline after handshake
+	s.conn.SetDeadline(time.Time{})
 
 	s.sshClient = ssh.NewClient(sshConn, chans, reqs)
 	fmt.Println("✓ SSH transport established and authenticated.")
@@ -79,4 +113,10 @@ func (s *OverWebSocket) Close() error {
 		return s.sshClient.Close()
 	}
 	return nil
+}
+
+// stderrOrStdout returns stderr if available, otherwise stdout.
+func stderrOrStdout() *os.File {
+	// fallback to stdout if stderr is not available
+	return os.Stderr
 }
