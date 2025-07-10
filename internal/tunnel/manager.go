@@ -40,10 +40,10 @@ func (m *Manager) Start() error {
 	}
 
 	// Create SSH client
-	m.sshClient = ssh.NewOverWebSocket(conn, m.config.SSH.Username, m.config.SSH.Password)
+	m.sshClient = ssh.NewSSHClient(conn, m.config.SSH.Username, m.config.SSH.Password)
 
 	// Start SSH transport
-	if sshOverWS, ok := m.sshClient.(*ssh.OverWebSocket); ok {
+	if sshOverWS, ok := m.sshClient.(*ssh.SSHClient); ok {
 		if err := sshOverWS.StartTransport(); err != nil {
 			return fmt.Errorf("failed to start SSH transport: %w", err)
 		}

@@ -21,27 +21,36 @@ type DirectEstablisher struct{}
 func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	address := net.JoinHostPort(cfg.ServerHost, cfg.ServerPort)
 
-	// For direct mode, we still need to establish WebSocket tunnel if payload is provided
-	if cfg.HTTPPayload != "" {
-		conn, err := EstablishWSTunnel(
-			"", "", // No proxy for direct mode
-			cfg.ServerHost,
-			cfg.ServerPort,
-			cfg.HTTPPayload,
-			cfg.SpoofedHost,
-			cfg.ServerPort == "443", // Use TLS if port is 443
-			nil,
+	fmt.Printf("→ Connecting to %s\n", address)
+
+	// Establish TCP or TLS connection first
+	var conn net.Conn
+	var err error
+	if cfg.ServerPort == "443" {
+		tlsConfig := &tls.Config{
+			ServerName: cfg.SpoofedHost,
+			MinVersion: tls.VersionTLS12,
+		}
+		conn, err = tls.DialWithDialer(
+			&net.Dialer{Timeout: time.Duration(cfg.ConnectionTimeout) * time.Second},
+			"tcp",
+			address,
+			tlsConfig,
 		)
+	} else {
+		conn, err = net.DialTimeout("tcp", address, time.Duration(cfg.ConnectionTimeout)*time.Second)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect directly: %w", err)
+	}
+
+	// Perform WebSocket upgrade if payload is provided
+	if cfg.HTTPPayload != "" {
+		wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.ServerHost, cfg.ServerPort, cfg.SpoofedHost)
 		if err != nil {
 			return nil, fmt.Errorf("failed to establish WebSocket tunnel: %w", err)
 		}
-		return conn, nil
-	}
-
-	// Fallback to plain TCP connection
-	conn, err := net.DialTimeout("tcp", address, time.Duration(cfg.ConnectionTimeout)*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect directly: %w", err)
+		return wsConn, nil
 	}
 
 	return conn, nil
@@ -53,27 +62,37 @@ type ProxyEstablisher struct{}
 // Establish creates a connection through an HTTP proxy with WebSocket upgrade
 func (p *ProxyEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	proxyAddress := net.JoinHostPort(cfg.ProxyHost, cfg.ProxyPort)
-	targetAddress := net.JoinHostPort(cfg.ServerHost, cfg.ServerPort)
+	fmt.Printf("→ Connecting to proxy %s for target %s\n", proxyAddress, cfg.ServerHost)
 
-	fmt.Printf("→ Connecting to proxy %s for target %s\n", proxyAddress, targetAddress)
+	// Establish TCP or TLS connection to proxy
+	var conn net.Conn
+	var err error
+	if cfg.ProxyPort == "443" {
+		tlsConfig := &tls.Config{
+			ServerName: cfg.SpoofedHost,
+			MinVersion: tls.VersionTLS12,
+		}
+		conn, err = tls.DialWithDialer(
+			&net.Dialer{Timeout: time.Duration(cfg.ConnectionTimeout) * time.Second},
+			"tcp",
+			proxyAddress,
+			tlsConfig,
+		)
+	} else {
+		conn, err = net.DialTimeout("tcp", proxyAddress, time.Duration(cfg.ConnectionTimeout)*time.Second)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to proxy: %w", err)
+	}
 
-	// Use WebSocket tunnel through proxy
-	conn, err := EstablishWSTunnel(
-		cfg.ProxyHost,
-		cfg.ProxyPort,
-		cfg.ServerHost,
-		cfg.ServerPort,
-		cfg.HTTPPayload,
-		cfg.SpoofedHost,
-		cfg.ProxyPort == "443", // Use TLS if port is 443
-		nil,
-	)
+	// Perform WebSocket upgrade through proxy
+	wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.ServerHost, cfg.ServerPort, cfg.SpoofedHost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish proxy WebSocket tunnel: %w", err)
 	}
 
 	fmt.Printf("✓ Proxy WebSocket connection established through %s\n", proxyAddress)
-	return conn, nil
+	return wsConn, nil
 }
 
 // SNIEstablisher handles SNI-fronted connections

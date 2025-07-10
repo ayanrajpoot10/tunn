@@ -2,12 +2,9 @@ package connection
 
 import (
 	"bytes"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"strings"
-	"time"
-
 )
 
 // ReplacePlaceholders replaces [host] and [crlf] placeholders in the payload
@@ -43,35 +40,9 @@ func ReadHeaders(conn net.Conn) ([]byte, error) {
 }
 
 // EstablishWSTunnel performs the WebSocket upgrade handshake
-func EstablishWSTunnel(proxyHost, proxyPort, targetHost, targetPort, payload, hostHeader string, useTLS bool, conn net.Conn) (net.Conn, error) {
-	// Connect if no existing connection
+func EstablishWSTunnel(conn net.Conn, payload, targetHost, targetPort, hostHeader string) (net.Conn, error) {
 	if conn == nil {
-		address := net.JoinHostPort(targetHost, targetPort)
-		if proxyHost != "" && proxyPort != "" {
-			address = net.JoinHostPort(proxyHost, proxyPort)
-		}
-
-		fmt.Printf("→ Connecting to %s\n", address)
-
-		var err error
-		if useTLS {
-			tlsConfig := &tls.Config{
-				ServerName: hostHeader,
-				MinVersion: tls.VersionTLS12,
-			}
-			conn, err = tls.DialWithDialer(
-				&net.Dialer{Timeout: 30 * time.Second},
-				"tcp",
-				address,
-				tlsConfig,
-			)
-		} else {
-			conn, err = net.DialTimeout("tcp", address, 30*time.Second)
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect: %w", err)
-		}
+		return nil, fmt.Errorf("connection must be established before WebSocket upgrade")
 	}
 
 	// Send WebSocket upgrade request

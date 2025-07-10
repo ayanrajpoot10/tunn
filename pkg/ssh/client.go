@@ -17,17 +17,17 @@ type Client interface {
 	Close() error
 }
 
-// OverWebSocket wraps an SSH connection over a WebSocket-upgraded connection
-type OverWebSocket struct {
+// SSHClient wraps an SSH connection over any net.Conn
+type SSHClient struct {
 	conn      net.Conn
 	sshClient *ssh.Client
 	username  string
 	password  string
 }
 
-// NewOverWebSocket creates a new SSH over WebSocket connection
-func NewOverWebSocket(conn net.Conn, username, password string) *OverWebSocket {
-	return &OverWebSocket{
+// NewSSHClient creates a new SSH client over a net.Conn
+func NewSSHClient(conn net.Conn, username, password string) *SSHClient {
+	return &SSHClient{
 		conn:     conn,
 		username: username,
 		password: password,
@@ -54,8 +54,8 @@ func stripHTMLTags(htmlStr string) string {
 	return b.String()
 }
 
-// StartTransport initializes the SSH client over the WebSocket connection
-func (s *OverWebSocket) StartTransport() error {
+// StartTransport initializes the SSH client over the connection
+func (s *SSHClient) StartTransport() error {
 	fmt.Println("→ Starting SSH transport over WebSocket connection...")
 
 	// Set keepalive on the underlying WebSocket connection if it's TCP
@@ -78,7 +78,7 @@ func (s *OverWebSocket) StartTransport() error {
 		Timeout:         handshakeTimeout,
 		BannerCallback: func(message string) error {
 			plain := stripHTMLTags(message)
-			fmt.Fprintln(stderrOrStdout(), plain)
+			fmt.Fprintln(os.Stderr, plain)
 			return nil
 		},
 	}
@@ -103,20 +103,14 @@ func (s *OverWebSocket) StartTransport() error {
 }
 
 // Dial opens a new connection to the given address through the SSH tunnel
-func (s *OverWebSocket) Dial(network, address string) (net.Conn, error) {
+func (s *SSHClient) Dial(network, address string) (net.Conn, error) {
 	return s.sshClient.Dial(network, address)
 }
 
 // Close closes the SSH connection
-func (s *OverWebSocket) Close() error {
+func (s *SSHClient) Close() error {
 	if s.sshClient != nil {
 		return s.sshClient.Close()
 	}
 	return nil
-}
-
-// stderrOrStdout returns stderr if available, otherwise stdout.
-func stderrOrStdout() *os.File {
-	// fallback to stdout if stderr is not available
-	return os.Stderr
 }
