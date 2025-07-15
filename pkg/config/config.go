@@ -9,12 +9,12 @@ import (
 // Config represents the tunnel configuration structure
 type Config struct {
 	// Connection settings
-	ConnectionMode string `json:"connectionMode"`        // proxy, sni, direct
-	ServerHost     string `json:"serverHost"`            // Target server hostname
-	ServerPort     string `json:"serverPort,omitempty"`  // Target server port (default: 22)
-	ProxyHost      string `json:"proxyHost,omitempty"`   // Proxy server hostname (for proxy/sni modes)
-	ProxyPort      string `json:"proxyPort,omitempty"`   // Proxy server port
-	SpoofedHost    string `json:"spoofedHost,omitempty"` // Host header value for SNI and payload spoofing
+	Mode        string `json:"Mode"`                  // direct, proxy, sni
+	ServerHost  string `json:"serverHost"`            // Target server hostname
+	ServerPort  string `json:"serverPort,omitempty"`  // Target server port (default: 22)
+	ProxyHost   string `json:"proxyHost,omitempty"`   // Proxy server hostname (for proxy/sni modes)
+	ProxyPort   string `json:"proxyPort,omitempty"`   // Proxy server port
+	SpoofedHost string `json:"spoofedHost,omitempty"` // Host header value for SNI and payload spoofing
 
 	// SSH settings
 	SSH SSHConfig `json:"ssh"`
@@ -61,9 +61,9 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // validate validates the configuration
 func (c *Config) validate() error {
-	validModes := map[string]bool{"proxy": true, "sni": true, "direct": true}
-	if !validModes[c.ConnectionMode] {
-		return fmt.Errorf("invalid mode '%s', must be one of: proxy, sni, direct", c.ConnectionMode)
+	validModes := map[string]bool{"direct": true, "proxy": true, "sni": true}
+	if !validModes[c.Mode] {
+		return fmt.Errorf("invalid mode '%s', must be one of: direct, proxy, sni", c.Mode)
 	}
 
 	// Check required fields
@@ -78,11 +78,11 @@ func (c *Config) validate() error {
 	}
 
 	// Validate proxy/sni mode requirements
-	if c.ConnectionMode == "proxy" || c.ConnectionMode == "sni" {
+	if c.Mode == "proxy" || c.Mode == "sni" {
 		if c.ProxyHost == "" || c.ProxyPort == "" {
-			return fmt.Errorf("proxyHost and proxyPort are required for %s mode", c.ConnectionMode)
+			return fmt.Errorf("proxyHost and proxyPort are required for %s mode", c.Mode)
 		}
-		if c.ConnectionMode == "sni" && c.SpoofedHost == "" {
+		if c.Mode == "sni" && c.SpoofedHost == "" {
 			return fmt.Errorf("spoofedHost is required for sni mode")
 		}
 	}

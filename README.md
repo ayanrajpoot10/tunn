@@ -1,10 +1,10 @@
 # Tunn - SSH Tunneling Tool
 
-A cross-platform SSH tunneling tool that creates secure connections through HTTP proxies, SNI fronting, and direct connections over WebSocket.
+A cross-platform SSH tunneling tool that creates secure connections through direct connections over WebSocket, HTTP proxies, and SNI fronting.
 
 ## Features
 
-- **Multiple tunnel modes**: Proxy, SNI fronting, and direct connection
+- **Multiple tunnel modes**: Direct connection, Proxy, and SNI fronting
 - **WebSocket-based SSH tunnels** for better bypass capabilities
 - **SOCKS5 and HTTP proxy support** 
 - **Domain spoofing** capabilities
@@ -24,22 +24,20 @@ make build
 
 1. Generate a configuration file:
 ```bash
-tunn config generate --mode proxy --output config.json
+tunn config generate --mode direct --output config.json
 ```
 
 2. Edit the configuration with your details:
 ```json
 {
-  "connectionMode": "proxy",
-  "proxyHost": "proxy.example.com",
-  "proxyPort": "80",
+  "Mode": "direct",
   "serverHost": "ssh-server.com",
+  "spoofedHost": "bug-host"
   "ssh": {
     "username": "user",
     "password": "password"
   },
-  "listenPort": 1080,
-  "proxyType": "socks5"
+  "listenPort": 1080
 }
 ```
 
@@ -54,12 +52,12 @@ tunn --config config.json
 
 ### Tunnel Modes
 
+- **Direct Mode**: Direct connection with optional domain spoofing
 - **Proxy Mode**: Routes through HTTP proxy → WebSocket → SSH server
 - **SNI Fronting**: Uses SNI header manipulation for bypassing restrictions
-- **Direct Mode**: Direct connection with optional domain spoofing
 
 ### Required Fields
-- `connectionMode`: "proxy", "sni", or "direct"
+- `Mode`: "direct", "proxy", or "sni"
 - `serverHost`: SSH server hostname
 - `ssh.username` and `ssh.password`: SSH credentials
 

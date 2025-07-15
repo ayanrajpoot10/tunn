@@ -46,7 +46,7 @@ func init() {
 }
 
 func runTunnel(cmd *cobra.Command, args []string) {
-	fmt.Printf("Mode: %s\n", tunnelConfig.ConnectionMode)
+	fmt.Printf("Mode: %s\n", tunnelConfig.Mode)
 	fmt.Printf("\n")
 
 	// Create and start tunnel manager

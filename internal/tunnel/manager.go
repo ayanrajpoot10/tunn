@@ -29,7 +29,7 @@ func NewManager(cfg *config.Config) *Manager {
 // Start starts the tunnel and proxy server
 func (m *Manager) Start() error {
 	// Establish connection
-	establisher, err := connection.GetEstablisher(m.config.ConnectionMode)
+	establisher, err := connection.GetEstablisher(m.config.Mode)
 	if err != nil {
 		return fmt.Errorf("failed to get connection establisher: %w", err)
 	}

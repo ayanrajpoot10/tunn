@@ -38,7 +38,7 @@ func NewSSHClient(conn net.Conn, username, password string) *SSHClient {
 func stripHTMLTags(htmlStr string) string {
 	doc, err := html.Parse(strings.NewReader(htmlStr))
 	if err != nil {
-		return htmlStr // fallback to original if parsing fails
+		return htmlStr
 	}
 	var b strings.Builder
 	var f func(*html.Node)
@@ -56,11 +56,11 @@ func stripHTMLTags(htmlStr string) string {
 
 // StartTransport initializes the SSH client over the connection
 func (s *SSHClient) StartTransport() error {
-	fmt.Println("→ Starting SSH transport over WebSocket connection...")
+	fmt.Println("→ Starting SSH transport over connection...")
 
-	// Set keepalive on the underlying WebSocket connection if it's TCP
+	// Set keepalive on the underlying connection if it's TCP
 	if tcpConn, ok := s.conn.(*net.TCPConn); ok {
-		fmt.Println("→ Setting keepalive on WebSocket connection...")
+		fmt.Println("→ Setting keepalive on connection...")
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
@@ -85,7 +85,7 @@ func (s *SSHClient) StartTransport() error {
 
 	fmt.Printf("→ Attempting SSH connection with user: %s\n", s.username)
 
-	// Create SSH client using the WebSocket connection
+	// Create SSH client using the connection
 	sshConn, chans, reqs, err := ssh.NewClientConn(s.conn, "tcp", config)
 	if err != nil {
 		if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
