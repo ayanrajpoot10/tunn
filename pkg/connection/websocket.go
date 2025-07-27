@@ -64,8 +64,7 @@ func EstablishWSTunnel(conn net.Conn, payload, targetHost, targetPort, hostHeade
 
 		// Print the response received from WebSocket request
 		fmt.Printf("← WebSocket response received:\n")
-		responseText := strings.TrimSpace(string(headers))
-		fmt.Printf("  %s\n", strings.ReplaceAll(responseText, "\r\n", "\n  "))
+		fmt.Printf("  %s\n", strings.SplitN(strings.TrimSpace(string(headers)), "\n", 2)[0])
 
 		// Check if upgrade was successful
 		headerStr := string(headers)
