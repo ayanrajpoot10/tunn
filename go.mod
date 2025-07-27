@@ -2,8 +2,6 @@ module tunn
 
 go 1.23.0
 
-toolchain go1.24.4
-
 require (
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/crypto v0.33.0
