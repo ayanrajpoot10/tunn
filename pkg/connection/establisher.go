@@ -19,16 +19,16 @@ type DirectEstablisher struct{}
 
 // Establish creates a direct connection to the target with WebSocket upgrade
 func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
-	address := net.JoinHostPort(cfg.ServerHost, cfg.ServerPort)
+	address := net.JoinHostPort(cfg.SSHHost, cfg.SSHPort)
 
 	fmt.Printf("→ Connecting to %s\n", address)
 
 	// Establish TCP or TLS connection first
 	var conn net.Conn
 	var err error
-	if cfg.ServerPort == "443" {
+	if cfg.SSHPort == "443" {
 		tlsConfig := &tls.Config{
-			ServerName: cfg.SpoofedHost,
+			ServerName: cfg.SSHHost,
 			MinVersion: tls.VersionTLS12,
 		}
 		conn, err = tls.DialWithDialer(
@@ -46,7 +46,7 @@ func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 
 	// Perform WebSocket upgrade if payload is provided
 	if cfg.HTTPPayload != "" {
-		wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.ServerHost, cfg.ServerPort, cfg.SpoofedHost)
+		wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.SSHHost, cfg.SSHPort, cfg.SSHHost)
 		if err != nil {
 			return nil, fmt.Errorf("failed to establish WebSocket tunnel: %w", err)
 		}
@@ -62,14 +62,14 @@ type ProxyEstablisher struct{}
 // Establish creates a connection through an HTTP proxy with WebSocket upgrade
 func (p *ProxyEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	proxyAddress := net.JoinHostPort(cfg.ProxyHost, cfg.ProxyPort)
-	fmt.Printf("→ Connecting to proxy %s for target %s\n", proxyAddress, cfg.ServerHost)
+	fmt.Printf("→ Connecting to proxy %s for target %s\n", proxyAddress, cfg.SSHHost)
 
 	// Establish TCP or TLS connection to proxy
 	var conn net.Conn
 	var err error
 	if cfg.ProxyPort == "443" {
 		tlsConfig := &tls.Config{
-			ServerName: cfg.SpoofedHost,
+			ServerName: cfg.ProxyHost,
 			MinVersion: tls.VersionTLS12,
 		}
 		conn, err = tls.DialWithDialer(
@@ -86,51 +86,13 @@ func (p *ProxyEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	}
 
 	// Perform WebSocket upgrade through proxy
-	wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.ServerHost, cfg.ServerPort, cfg.SpoofedHost)
+	wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.SSHHost, cfg.SSHPort, cfg.SSHHost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish proxy WebSocket tunnel: %w", err)
 	}
 
 	fmt.Printf("✓ Proxy WebSocket connection established through %s\n", proxyAddress)
 	return wsConn, nil
-}
-
-// SNIEstablisher handles SNI-fronted connections
-type SNIEstablisher struct{}
-
-// Establish creates a connection using SNI fronting
-func (s *SNIEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
-	proxyAddress := net.JoinHostPort(cfg.ProxyHost, cfg.ProxyPort)
-
-	fmt.Printf("→ Establishing SNI connection to %s (fronting: %s)\n", cfg.ServerHost, cfg.SpoofedHost)
-
-	// Create TLS config with SNI
-	tlsConfig := &tls.Config{
-		ServerName: cfg.SpoofedHost,
-		MinVersion: tls.VersionTLS12,
-	}
-
-	// Connect with TLS
-	conn, err := tls.DialWithDialer(
-		&net.Dialer{Timeout: time.Duration(cfg.ConnectionTimeout) * time.Second},
-		"tcp",
-		proxyAddress,
-		tlsConfig,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to establish SNI connection: %w", err)
-	}
-
-	// Send custom payload if provided
-	if cfg.HTTPPayload != "" {
-		if _, err := conn.Write([]byte(cfg.HTTPPayload)); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to send payload: %w", err)
-		}
-	}
-
-	fmt.Printf("✓ SNI connection established to %s\n", cfg.ServerHost)
-	return conn, nil
 }
 
 // GetEstablisher returns the appropriate connection establisher based on mode
@@ -140,8 +102,6 @@ func GetEstablisher(mode string) (Establisher, error) {
 		return &DirectEstablisher{}, nil
 	case "proxy":
 		return &ProxyEstablisher{}, nil
-	case "sni":
-		return &SNIEstablisher{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported connection mode: %s", mode)
 	}

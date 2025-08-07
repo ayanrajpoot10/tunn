@@ -60,7 +60,6 @@ func (s *SSHClient) StartTransport() error {
 
 	// Set keepalive on the underlying connection if it's TCP
 	if tcpConn, ok := s.conn.(*net.TCPConn); ok {
-		fmt.Println("→ Setting keepalive on connection...")
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
@@ -74,7 +73,7 @@ func (s *SSHClient) StartTransport() error {
 		Auth: []ssh.AuthMethod{
 			ssh.Password(s.password),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // WARNING: This is insecure for production
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         handshakeTimeout,
 		BannerCallback: func(message string) error {
 			plain := stripHTMLTags(message)

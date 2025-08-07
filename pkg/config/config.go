@@ -9,12 +9,11 @@ import (
 // Config represents the tunnel configuration structure
 type Config struct {
 	// Connection settings
-	Mode        string `json:"Mode"`                  // direct, proxy, sni
-	ServerHost  string `json:"serverHost"`            // Target server hostname
-	ServerPort  string `json:"serverPort,omitempty"`  // Target server port (default: 22)
-	ProxyHost   string `json:"proxyHost,omitempty"`   // Proxy server hostname (for proxy/sni modes)
-	ProxyPort   string `json:"proxyPort,omitempty"`   // Proxy server port
-	SpoofedHost string `json:"spoofedHost,omitempty"` // Host header value for SNI and payload spoofing
+	Mode      string `json:"Mode"`                // direct, proxy
+	SSHHost   string `json:"sshHost"`             // SSH server hostname
+	SSHPort   string `json:"sshPort,omitempty"`   // SSH server port (default: 22)
+	ProxyHost string `json:"proxyHost,omitempty"` // Proxy server hostname (for proxy mode)
+	ProxyPort string `json:"proxyPort,omitempty"` // Proxy server port
 
 	// SSH settings
 	SSH SSHConfig `json:"ssh"`
@@ -61,14 +60,14 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // validate validates the configuration
 func (c *Config) validate() error {
-	validModes := map[string]bool{"direct": true, "proxy": true, "sni": true}
+	validModes := map[string]bool{"direct": true, "proxy": true}
 	if !validModes[c.Mode] {
-		return fmt.Errorf("invalid mode '%s', must be one of: direct, proxy, sni", c.Mode)
+		return fmt.Errorf("invalid mode '%s', must be one of: direct, proxy", c.Mode)
 	}
 
 	// Check required fields
-	if c.ServerHost == "" {
-		return fmt.Errorf("serverHost is required")
+	if c.SSHHost == "" {
+		return fmt.Errorf("sshHost is required")
 	}
 	if c.SSH.Username == "" {
 		return fmt.Errorf("SSH username is required")
@@ -77,13 +76,10 @@ func (c *Config) validate() error {
 		return fmt.Errorf("SSH password is required")
 	}
 
-	// Validate proxy/sni mode requirements
-	if c.Mode == "proxy" || c.Mode == "sni" {
+	// Validate proxy mode requirements
+	if c.Mode == "proxy" {
 		if c.ProxyHost == "" || c.ProxyPort == "" {
-			return fmt.Errorf("proxyHost and proxyPort are required for %s mode", c.Mode)
-		}
-		if c.Mode == "sni" && c.SpoofedHost == "" {
-			return fmt.Errorf("spoofedHost is required for sni mode")
+			return fmt.Errorf("proxyHost and proxyPort are required for proxy mode")
 		}
 	}
 
@@ -92,8 +88,8 @@ func (c *Config) validate() error {
 
 // setDefaults sets default values for optional fields
 func (c *Config) setDefaults() {
-	if c.ServerPort == "" {
-		c.ServerPort = "22"
+	if c.SSHPort == "" {
+		c.SSHPort = "22"
 	}
 	if c.ListenPort == 0 {
 		c.ListenPort = 1080

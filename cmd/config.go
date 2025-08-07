@@ -45,7 +45,7 @@ func init() {
 	configCmd.AddCommand(validateCmd)
 
 	generateCmd.Flags().StringVarP(&generateFlags.output, "output", "o", "config.json", "output file path")
-	generateCmd.Flags().StringVarP(&generateFlags.mode, "mode", "m", "direct", "tunnel mode: direct, proxy, or sni")
+	generateCmd.Flags().StringVarP(&generateFlags.mode, "mode", "m", "direct", "tunnel mode: direct or proxy")
 
 	validateCmd.Flags().StringVarP(&validateFlags.configPath, "config", "c", "", "path to configuration file to validate (required)")
 	validateCmd.MarkFlagRequired("config")
@@ -57,10 +57,9 @@ func generateConfig(cmd *cobra.Command, args []string) {
 	switch generateFlags.mode {
 	case "direct":
 		sampleConfig = &config.Config{
-			Mode:        "direct",
-			ServerHost:  "target.example.com",
-			ServerPort:  "80",
-			SpoofedHost: "cloudflare.com",
+			Mode:    "direct",
+			SSHHost: "target.example.com",
+			SSHPort: "80",
 			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
@@ -72,29 +71,11 @@ func generateConfig(cmd *cobra.Command, args []string) {
 		}
 	case "proxy":
 		sampleConfig = &config.Config{
-			Mode:        "proxy",
-			ServerHost:  "target.example.com",
-			ServerPort:  "80",
-			ProxyHost:   "proxy.example.com",
-			ProxyPort:   "80",
-			SpoofedHost: "google.com",
-			SSH: config.SSHConfig{
-				Username: "user",
-				Password: "password",
-			},
-			ListenPort:        1080,
-			ProxyType:         "socks5",
-			HTTPPayload:       "GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]",
-			ConnectionTimeout: 30,
-		}
-	case "sni":
-		sampleConfig = &config.Config{
-			Mode:        "sni",
-			ServerHost:  "target.example.com",
-			ServerPort:  "443",
-			ProxyHost:   "proxy.example.com",
-			ProxyPort:   "443",
-			SpoofedHost: "cloudflare.com",
+			Mode:      "proxy",
+			SSHHost:   "target.example.com",
+			SSHPort:   "80",
+			ProxyHost: "proxy.example.com",
+			ProxyPort: "80",
 			SSH: config.SSHConfig{
 				Username: "user",
 				Password: "password",
@@ -105,7 +86,7 @@ func generateConfig(cmd *cobra.Command, args []string) {
 			ConnectionTimeout: 30,
 		}
 	default:
-		fmt.Printf("Error: Unsupported mode: %s (supported: proxy, sni, direct)\n", generateFlags.mode)
+		fmt.Printf("Error: Unsupported mode: %s (supported: proxy, direct)\n", generateFlags.mode)
 		os.Exit(1)
 	}
 
@@ -143,12 +124,9 @@ func validateConfig(cmd *cobra.Command, args []string) {
 	fmt.Printf("Success: Configuration file is valid: %s\n", configPath)
 	fmt.Printf("Configuration Summary:\n")
 	fmt.Printf("   - Mode: %s\n", config.Mode)
-	fmt.Printf("   - Target: %s:%s\n", config.ServerHost, config.ServerPort)
+	fmt.Printf("   - SSH Target: %s:%s\n", config.SSHHost, config.SSHPort)
 	if config.ProxyHost != "" {
 		fmt.Printf("   - Proxy: %s:%s\n", config.ProxyHost, config.ProxyPort)
-	}
-	if config.SpoofedHost != "" {
-		fmt.Printf("   - Spoofed Host: %s\n", config.SpoofedHost)
 	}
 	fmt.Printf("   - SSH User: %s\n", config.SSH.Username)
 	fmt.Printf("   - Local Port: %d (%s)\n", config.ListenPort, config.ProxyType)
