@@ -1,3 +1,12 @@
+// Package tunnel provides the core tunnel management functionality for Tunn.
+//
+// This package implements the tunnel lifecycle management, including connection
+// establishment, SSH client setup, and proxy server initialization. It coordinates
+// between the configuration, connection, SSH, and proxy packages to provide
+// a complete tunneling solution.
+//
+// The Manager type handles the entire tunnel lifecycle from initialization
+// through graceful shutdown, managing both SSH connections and local proxy servers.
 package tunnel
 
 import (
@@ -12,21 +21,47 @@ import (
 	"tunn/pkg/ssh"
 )
 
-// Manager manages the tunnel lifecycle
+// Manager manages the complete tunnel lifecycle including connection establishment,
+// SSH client setup, proxy server initialization, and graceful shutdown.
+//
+// The Manager coordinates between different components to provide a seamless
+// tunneling experience, handling both direct and proxy-based connection modes.
 type Manager struct {
-	config      *config.Config
-	sshClient   ssh.Client
-	proxyServer interface{} // Can be either SOCKS5 or HTTP proxy
+	config      *config.Config // The tunnel configuration
+	sshClient   ssh.Client     // SSH client for tunneling
+	proxyServer interface{}    // Local proxy server (SOCKS5 or HTTP)
 }
 
-// NewManager creates a new tunnel manager
+// NewManager creates a new tunnel manager with the provided configuration.
+//
+// The manager will use the configuration to determine the appropriate connection
+// method, SSH settings, and proxy type to establish.
+//
+// Parameters:
+//   - cfg: The tunnel configuration containing all necessary settings
+//
+// Returns:
+//   - *Manager: A new tunnel manager instance ready for startup
 func NewManager(cfg *config.Config) *Manager {
 	return &Manager{
 		config: cfg,
 	}
 }
 
-// Start starts the tunnel and proxy server
+// Start establishes the complete tunnel setup and starts all necessary services.
+//
+// This method performs the following operations in sequence:
+//  1. Establishes the base connection (direct or through proxy)
+//  2. Creates and initializes the SSH client over the connection
+//  3. Starts the SSH transport layer
+//  4. Launches the appropriate local proxy server (SOCKS5 or HTTP)
+//  5. Waits for shutdown signals to gracefully terminate
+//
+// The method blocks until a shutdown signal is received, making it suitable
+// for use in the main application loop.
+//
+// Returns:
+//   - error: An error if any step of the setup process fails
 func (m *Manager) Start() error {
 	// Establish connection
 	establisher, err := connection.GetEstablisher(m.config.Mode)
@@ -63,7 +98,18 @@ func (m *Manager) Start() error {
 	return nil
 }
 
-// startProxy starts the appropriate proxy server
+// startProxy initializes and starts the appropriate local proxy server based on configuration.
+//
+// This method creates either a SOCKS5 or HTTP proxy server according to the ProxyType
+// setting in the configuration. The proxy server will listen on the configured port
+// and forward connections through the established SSH tunnel.
+//
+// Supported proxy types:
+//   - "socks5" or "socks": Creates a SOCKS5 proxy server
+//   - "http": Creates an HTTP proxy server
+//
+// Returns:
+//   - error: An error if the proxy type is unsupported or proxy startup fails
 func (m *Manager) startProxy() error {
 	switch m.config.ProxyType {
 	case "socks5", "socks":
@@ -79,7 +125,14 @@ func (m *Manager) startProxy() error {
 	}
 }
 
-// waitForShutdown waits for shutdown signals
+// waitForShutdown blocks and waits for system shutdown signals to gracefully terminate the tunnel.
+//
+// This method listens for SIGINT (Ctrl+C) and SIGTERM signals, providing a clean
+// shutdown mechanism. When a signal is received, it closes the SSH client connection
+// and performs cleanup operations.
+//
+// The method blocks the calling goroutine until a shutdown signal is received,
+// making it suitable for use in the main application flow.
 func (m *Manager) waitForShutdown() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
