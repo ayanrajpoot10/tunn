@@ -16,13 +16,6 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Configuration management commands",
-	Long: `Configuration management commands for Tunn tunneling tool.
-
-This command provides subcommands for:
-• Generating sample configuration files
-• Validating existing configuration files
-
-Use the subcommands to manage your Tunn configuration files effectively.`,
 }
 
 // generateCmd represents the config generate command.
@@ -30,18 +23,6 @@ Use the subcommands to manage your Tunn configuration files effectively.`,
 var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate a sample configuration file",
-	Long: `Generate a sample configuration file with examples for all supported modes.
-
-The generated configuration file includes all available options with example values,
-making it easy to customize for your specific tunneling requirements.
-
-Supported modes:
-• direct: Direct connection with optional WebSocket upgrade
-• proxy: Connection through HTTP proxy with WebSocket upgrade
-
-Examples:
-  tunn config generate --mode direct --output config.json
-  tunn config generate --mode proxy --output proxy-config.json`,
 	Run: generateConfig,
 }
 
@@ -50,19 +31,6 @@ Examples:
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate configuration file",
-	Long: `Validate the syntax and content of a configuration file.
-
-This command checks:
-• JSON syntax correctness
-• Required fields presence
-• Field value validity
-• Mode-specific configuration requirements
-
-The validation ensures your configuration file is ready for use with Tunn.
-
-Examples:
-  tunn config validate --config config.json
-  tunn config validate -c /path/to/config.json`,
 	Run: validateConfig,
 }
 

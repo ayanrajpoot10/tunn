@@ -29,20 +29,6 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "tunn",
 	Short: "A powerful tunnel tool for secure connections",
-	Long: `Tunn is a cross-platform SSH tunneling tool that creates secure connections
-through direct connections over WebSocket and HTTP proxies.
-
-Features:
-• Multiple tunnel modes: Direct connection and Proxy
-• WebSocket-based SSH tunnels for better bypass capabilities
-• SOCKS5 and HTTP proxy support
-• Domain spoofing capabilities
-• Cross-platform support (Windows, Linux, macOS)
-
-Examples:
-  tunn --config config.json
-  tunn config generate --mode direct --output myconfig.json
-  tunn config validate --config myconfig.json`,
 	Version: "v0.1.2",
 	PreRun: func(cmd *cobra.Command, args []string) {
 		var err error
