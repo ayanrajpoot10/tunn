@@ -17,7 +17,7 @@ Download the latest binary from the [releases page](../../releases) or build fro
 ```bash
 git clone https://github.com/ayanrajpoot10/Tunn.git
 cd Tunn
-make build
+go build
 ```
 
 ## Quick Start
@@ -30,13 +30,19 @@ tunn config generate --mode direct --output config.json
 2. Edit the configuration with your details:
 ```json
 {
-  "Mode": "direct",
-  "sshHost": "ssh-server.com",
+  "mode": "direct",
   "ssh": {
-    "username": "user",
-    "password": "password"
+    "host": "www.ayanrajpoot.net",
+    "port": 80,
+    "username": "abc",
+    "password": "1234"
   },
-  "listenPort": 1080
+  "listener": {
+    "port": 1080,
+    "proxyType": "http"
+  },
+  "httpPayload": "GET / HTTP/1.1[crlf]Host: api.ril.com[crlf]Upgrade: websocket[crlf][crlf]",
+  "connectionTimeout": 30
 }
 ```
 
@@ -45,7 +51,7 @@ tunn config generate --mode direct --output config.json
 tunn --config config.json
 ```
 
-4. Configure your applications to use the SOCKS proxy at `127.0.0.1:1080`
+4. Configure your applications to use the proxy at `127.0.0.1:1080`
 
 ## Configuration
 
@@ -55,22 +61,22 @@ tunn --config config.json
 - **Proxy Mode**: Routes through HTTP proxy → WebSocket → SSH server
 
 ### Required Fields
-- `Mode`: "direct" or "proxy"
-- `sshHost`: SSH server hostname
+- `mode`: "direct" or "proxy"
+- `ssh.host`: SSH server hostname
 - `ssh.username` and `ssh.password`: SSH credentials
 
 ### Optional Fields
-- `listenPort`: Local proxy port (default: 1080)
-- `proxyType`: "socks5" or "http" (default: "socks5")
+- `listener.port`: Local proxy port (default: 1080)
+- `listener.proxyType`: "socks5" or "http" (default: "socks5")
 - `connectionTimeout`: Connection timeout in seconds (default: 30)
 
 ## Usage Examples
 
 ### Browser Configuration
-Set your browser to use SOCKS5 proxy at `127.0.0.1:1080`
+Set your browser to use HTTP/SOCKS5 proxy at `127.0.0.1:1080`
 
 ### System-Wide Proxy
-Configure your system proxy settings to use `127.0.0.1:1080` (SOCKS5) or `127.0.0.1:8080` (HTTP) for system-wide tunneling.
+Configure your system proxy settings to use `127.0.0.1:1080` (SOCKS5) or `127.0.0.1:1080` (HTTP) for system-wide tunneling.
 
 ## License
 
