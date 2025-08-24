@@ -6,6 +6,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -15,29 +16,53 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	// configFile holds the path to the configuration file specified by the user.
-	configFile string
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
 
-	// tunnelConfig contains the loaded and validated tunnel configuration.
-	tunnelConfig *config.Config
-)
+const configKey contextKey = "cfg"
 
 // rootCmd represents the base command when called without any subcommands.
 // It loads the configuration file and starts the tunnel manager.
 var rootCmd = &cobra.Command{
-	Use:   "tunn",
-	Short: "A powerful tunnel tool for secure connections",
+	Use:     "tunn",
+	Short:   "A powerful tunnel tool for secure connections",
 	Version: "v0.1.2",
-	PreRun: func(cmd *cobra.Command, args []string) {
-		var err error
-		tunnelConfig, err = config.LoadConfig(configFile)
+
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.LoadConfig(configFile)
 		if err != nil {
-			fmt.Printf("Failed to load config: %v", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to load config: %w", err)
 		}
+
+		// Store config in context for Run
+		cmd.SetContext(context.WithValue(cmd.Context(), configKey, cfg))
+		return nil
 	},
-	Run: runTunnel,
+
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Retrieve config from context
+		cfg, ok := cmd.Context().Value(configKey).(*config.Config)
+		if !ok {
+			return fmt.Errorf("failed to retrieve config from context")
+		}
+
+		fmt.Printf("Mode: %s\n\n", cfg.Mode)
+
+		manager := tunnel.NewManager(cfg)
+		if err := manager.Start(); err != nil {
+			return fmt.Errorf("failed to start tunnel: %w", err)
+		}
+		return nil
+	},
+}
+
+var configFile string
+
+// init initializes the root command with persistent flags and configuration.
+func init() {
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "config.json", "config file path")
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	rootCmd.SetHelpCommand(&cobra.Command{Use: "no-help", Hidden: true})
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -45,28 +70,6 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
-		os.Exit(1)
-	}
-}
-
-// init initializes the root command with persistent flags and configuration.
-func init() {
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "config.json", "config file path")
-
-	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.SetHelpCommand(&cobra.Command{Use: "no-help", Hidden: true})
-}
-
-// runTunnel is the main execution function that starts the tunnel manager
-// with the loaded configuration.
-func runTunnel(cmd *cobra.Command, args []string) {
-	fmt.Printf("Mode: %s\n", tunnelConfig.Mode)
-	fmt.Printf("\n")
-
-	// Create and start tunnel manager
-	manager := tunnel.NewManager(tunnelConfig)
-	if err := manager.Start(); err != nil {
-		fmt.Printf("Failed to start tunnel: %v", err)
 		os.Exit(1)
 	}
 }
