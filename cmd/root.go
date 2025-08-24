@@ -7,7 +7,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"tunn/internal/tunnel"
@@ -34,7 +33,8 @@ var rootCmd = &cobra.Command{
 		var err error
 		tunnelConfig, err = config.LoadConfig(configFile)
 		if err != nil {
-			log.Fatalf("Failed to load configuration: %v", err)
+			fmt.Printf("Failed to load configuration: %v", err)
+			os.Exit(1)
 		}
 	},
 	Run: runTunnel,
@@ -65,6 +65,7 @@ func runTunnel(cmd *cobra.Command, args []string) {
 	// Create and start tunnel manager
 	manager := tunnel.NewManager(tunnelConfig)
 	if err := manager.Start(); err != nil {
-		log.Fatalf("Failed to start tunnel: %v", err)
+		fmt.Printf("Failed to start tunnel: %v", err)
+		os.Exit(1)
 	}
 }
