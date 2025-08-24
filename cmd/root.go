@@ -33,7 +33,7 @@ var rootCmd = &cobra.Command{
 		var err error
 		tunnelConfig, err = config.LoadConfig(configFile)
 		if err != nil {
-			fmt.Printf("Failed to load configuration: %v", err)
+			fmt.Printf("Failed to load config: %v", err)
 			os.Exit(1)
 		}
 	},
@@ -52,6 +52,7 @@ func Execute() {
 // init initializes the root command with persistent flags and configuration.
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "config.json", "config file path")
+
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.SetHelpCommand(&cobra.Command{Use: "no-help", Hidden: true})
 }

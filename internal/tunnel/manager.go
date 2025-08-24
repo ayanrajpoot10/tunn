@@ -89,7 +89,7 @@ func (m *Manager) Start() error {
 		return fmt.Errorf("failed to start proxy: %w", err)
 	}
 
-	fmt.Printf("\n✓ Tunnel established and %s proxy running on port %d\n", m.config.ProxyType, m.config.ListenPort)
+	fmt.Printf("\n✓ Tunnel established and %s proxy running on port %d\n", m.config.Listener.ProxyType, m.config.Listener.Port)
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
 	// Wait for shutdown signal
@@ -101,7 +101,7 @@ func (m *Manager) Start() error {
 // startProxy initializes and starts the appropriate local proxy server based on configuration.
 //
 // This method creates either a SOCKS5 or HTTP proxy server according to the ProxyType
-// setting in the configuration. The proxy server will listen on the configured port
+// setting in the listener configuration. The proxy server will listen on the configured port
 // and forward connections through the established SSH tunnel.
 //
 // Supported proxy types:
@@ -111,17 +111,17 @@ func (m *Manager) Start() error {
 // Returns:
 //   - error: An error if the proxy type is unsupported or proxy startup fails
 func (m *Manager) startProxy() error {
-	switch m.config.ProxyType {
+	switch m.config.Listener.ProxyType {
 	case "socks5", "socks":
 		socksProxy := proxy.NewSOCKS5(m.sshClient)
 		m.proxyServer = socksProxy
-		return socksProxy.Start(m.config.ListenPort)
+		return socksProxy.Start(m.config.Listener.Port)
 	case "http":
 		httpProxy := proxy.NewHTTP(m.sshClient)
 		m.proxyServer = httpProxy
-		return httpProxy.Start(m.config.ListenPort)
+		return httpProxy.Start(m.config.Listener.Port)
 	default:
-		return fmt.Errorf("unsupported proxy type: %s", m.config.ProxyType)
+		return fmt.Errorf("unsupported proxy type: %s", m.config.Listener.ProxyType)
 	}
 }
 

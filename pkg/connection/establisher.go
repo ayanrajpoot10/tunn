@@ -16,6 +16,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"tunn/pkg/config"
@@ -56,16 +57,17 @@ type DirectEstablisher struct{}
 //   - net.Conn: Ready-to-use connection to the SSH server
 //   - error: Connection or WebSocket upgrade error
 func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
-	address := net.JoinHostPort(cfg.SSHHost, cfg.SSHPort)
+	sshPort := strconv.Itoa(cfg.SSH.Port)
+	address := net.JoinHostPort(cfg.SSH.Host, sshPort)
 
 	fmt.Printf("→ Connecting to %s\n", address)
 
 	// Establish TCP or TLS connection first
 	var conn net.Conn
 	var err error
-	if cfg.SSHPort == "443" {
+	if cfg.SSH.Port == 443 {
 		tlsConfig := &tls.Config{
-			ServerName: cfg.SSHHost,
+			ServerName: cfg.SSH.Host,
 			MinVersion: tls.VersionTLS12,
 		}
 		conn, err = tls.DialWithDialer(
@@ -83,7 +85,7 @@ func (d *DirectEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 
 	// Perform WebSocket upgrade if payload is provided
 	if cfg.HTTPPayload != "" {
-		wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.SSHHost, cfg.SSHPort, cfg.SSHHost)
+		wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.SSH.Host, sshPort, cfg.SSH.Host)
 		if err != nil {
 			return nil, fmt.Errorf("failed to establish WebSocket tunnel: %w", err)
 		}
@@ -118,7 +120,8 @@ type ProxyEstablisher struct{}
 //   - error: Connection or WebSocket upgrade error
 func (p *ProxyEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	proxyAddress := net.JoinHostPort(cfg.ProxyHost, cfg.ProxyPort)
-	fmt.Printf("→ Connecting to proxy %s for target %s\n", proxyAddress, cfg.SSHHost)
+	sshPort := strconv.Itoa(cfg.SSH.Port)
+	fmt.Printf("→ Connecting to proxy %s for target %s\n", proxyAddress, cfg.SSH.Host)
 
 	// Establish TCP or TLS connection to proxy
 	var conn net.Conn
@@ -142,7 +145,7 @@ func (p *ProxyEstablisher) Establish(cfg *config.Config) (net.Conn, error) {
 	}
 
 	// Perform WebSocket upgrade through proxy
-	wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.SSHHost, cfg.SSHPort, cfg.SSHHost)
+	wsConn, err := EstablishWSTunnel(conn, cfg.HTTPPayload, cfg.SSH.Host, sshPort, cfg.SSH.Host)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish proxy WebSocket tunnel: %w", err)
 	}

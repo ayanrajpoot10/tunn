@@ -13,7 +13,7 @@
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	// Use cfg.Mode, cfg.SSHHost, etc.
+//	// Use cfg.Mode, cfg.SSH.Host, etc.
 package config
 
 import (
@@ -30,31 +30,39 @@ import (
 // HTTP proxies, with optional WebSocket upgrade capabilities.
 type Config struct {
 	// Connection settings
-	Mode      string `json:"Mode"`                // Connection mode: "direct" or "proxy"
-	SSHHost   string `json:"sshHost"`             // SSH server hostname or IP address
-	SSHPort   string `json:"sshPort,omitempty"`   // SSH server port (default: "22")
+	Mode      string `json:"mode"`                // Connection mode: "direct" or "proxy"
 	ProxyHost string `json:"proxyHost,omitempty"` // Proxy server hostname (required for proxy mode)
 	ProxyPort string `json:"proxyPort,omitempty"` // Proxy server port (required for proxy mode)
 
-	// SSH authentication settings
-	SSH SSHConfig `json:"ssh"` // SSH connection credentials
+	// SSH connection settings
+	SSH SSHConfig `json:"ssh"` // SSH connection settings and credentials
 
 	// Local proxy server settings
-	ListenPort int    `json:"listenPort,omitempty"` // Local SOCKS/HTTP server port (default: 1080)
-	ProxyType  string `json:"proxyType,omitempty"`  // Proxy protocol: "socks5" or "http" (default: "socks5")
+	Listener ListenerConfig `json:"listener"` // Local listener configuration
 
 	// Advanced connection settings
 	HTTPPayload       string `json:"httpPayload,omitempty"`       // Custom HTTP payload for WebSocket upgrade
 	ConnectionTimeout int    `json:"connectionTimeout,omitempty"` // Connection timeout in seconds (default: 30)
 }
 
-// SSHConfig defines SSH connection credentials and settings.
+// SSHConfig defines SSH connection settings and credentials.
 //
-// Contains the authentication information required to establish SSH connections
-// through the tunnel. Both username and password are required fields.
+// Contains the connection information and authentication details required
+// to establish SSH connections through the tunnel.
 type SSHConfig struct {
+	Host     string `json:"host"`     // SSH server hostname or IP address
+	Port     int    `json:"port"`     // SSH server port
 	Username string `json:"username"` // SSH username for authentication
 	Password string `json:"password"` // SSH password for authentication
+}
+
+// ListenerConfig defines local proxy server settings.
+//
+// Contains the configuration for the local proxy server that will listen
+// for client connections and forward them through the SSH tunnel.
+type ListenerConfig struct {
+	Port      int    `json:"port"`      // Local listener port (default: 1080)
+	ProxyType string `json:"proxyType"` // Proxy protocol: "http", "socks5", etc. (default: "socks5")
 }
 
 // LoadConfig loads and validates configuration from a JSON file.
@@ -110,8 +118,8 @@ func LoadConfig(configPath string) (*Config, error) {
 // consistent and ready for use.
 //
 // Validation checks include:
-//   - Mode must be either "direct" or "proxy"
-//   - Required fields (sshHost, SSH username/password) must be non-empty
+//   - Mode must be either "direct" or "proxy""
+//   - Required fields (SSH host, SSH username/password) must be non-empty
 //   - Proxy mode requires proxyHost and proxyPort
 //   - Field values must be reasonable and properly formatted
 //
@@ -123,9 +131,9 @@ func (c *Config) validate() error {
 		return fmt.Errorf("invalid mode '%s', must be one of: direct, proxy", c.Mode)
 	}
 
-	// Check required fields
-	if c.SSHHost == "" {
-		return fmt.Errorf("sshHost is required")
+	// Check required SSH fields
+	if c.SSH.Host == "" {
+		return fmt.Errorf("SSH host is required")
 	}
 	if c.SSH.Username == "" {
 		return fmt.Errorf("SSH username is required")
@@ -150,19 +158,19 @@ func (c *Config) validate() error {
 // configured, ensuring the configuration is complete and ready for use.
 //
 // Default values applied:
-//   - SSHPort: "22" (standard SSH port)
-//   - ListenPort: 1080 (standard SOCKS proxy port)
-//   - ProxyType: "socks5" (SOCKS5 protocol)
+//   - SSH Port: 22 (standard SSH port)
+//   - Listener Port: 1080 (HTTP proxy port)
+//   - Listener ProxyType: "http" (http protocol)
 //   - ConnectionTimeout: 30 seconds
 func (c *Config) setDefaults() {
-	if c.SSHPort == "" {
-		c.SSHPort = "22"
+	if c.SSH.Port == 0 {
+		c.SSH.Port = 22
 	}
-	if c.ListenPort == 0 {
-		c.ListenPort = 1080
+	if c.Listener.Port == 0 {
+		c.Listener.Port = 1080
 	}
-	if c.ProxyType == "" {
-		c.ProxyType = "socks5"
+	if c.Listener.ProxyType == "" {
+		c.Listener.ProxyType = "http"
 	}
 	if c.ConnectionTimeout == 0 {
 		c.ConnectionTimeout = 30
